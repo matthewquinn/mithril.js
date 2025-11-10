@@ -64,6 +64,7 @@ module.exports = function() {
 			vnode.state = {}
 			if (vnode.attrs != null) initLifecycle(vnode.attrs, vnode, hooks)
 			switch (tag) {
+				case "!": createDOM(parent, vnode, nextSibling); break;
 				case "#": createText(parent, vnode, nextSibling); break
 				case "<": createHTML(parent, vnode, ns, nextSibling); break
 				case "[": createFragment(parent, vnode, hooks, ns, nextSibling); break
@@ -99,6 +100,15 @@ module.exports = function() {
 			fragment.appendChild(child)
 		}
 		insertDOM(parent, fragment, nextSibling)
+	}
+	function createDOM(parent, vnode, hooks, ns, nextSibling) {
+		var fragment = getDocument(parent).createDocumentFragment()
+		if (vnode.dom != null) {
+			console.log('VNODE DOM', vnode.dom);
+			
+			fragment.children = vnode.dom;
+		}
+		insertDOM(parent, fragment, nextSibling);
 	}
 	function createFragment(parent, vnode, hooks, ns, nextSibling) {
 		var fragment = getDocument(parent).createDocumentFragment()
@@ -404,6 +414,7 @@ module.exports = function() {
 					updateLifecycle(vnode.attrs, vnode, hooks)
 				}
 				switch (oldTag) {
+					case "!": break;
 					case "#": updateText(old, vnode); break
 					case "<": updateHTML(parent, old, vnode, ns, nextSibling); break
 					case "[": updateFragment(parent, old, vnode, hooks, nextSibling, ns); break

@@ -1,5 +1,6 @@
 {
   "name": "mithril",
+  "type": "module",
   "version": "2.3.8",
   "description": "A framework for building brilliant applications",
   "author": "Leo Horie",

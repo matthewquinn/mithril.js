@@ -84,6 +84,8 @@ function execSelector(state, vnode) {
 function hyperscript(selector, attrs, ...children) {
 	if (selector == null || typeof selector !== "string" && typeof selector !== "function" && typeof selector.view !== "function") {
 		throw Error("The selector must be either a string or a component.");
+	} else if (selector instanceof DocumentFragment) {
+		return Vnode('!', attrs?.key, null, null, null, selector);
 	}
 
 	var vnode = hyperscriptVnode(attrs, children)

@@ -1,5 +1,5 @@
-;(function() {
-"use strict"
+// ;(function() {
+// "use strict"
 function Vnode(tag, key, attrs0, children, text, dom) {
 	return {tag: tag, key: key, attrs: attrs0, children: children, text: text, dom: dom, is: undefined, domSize: undefined, state: undefined, events: undefined, instance: undefined}
 }
@@ -123,7 +123,9 @@ function execSelector(state, vnode) {
 	return vnode
 }
 function hyperscript(selector, attrs, ...children) {
-	if (selector == null || typeof selector !== "string" && typeof selector !== "function" && typeof selector.view !== "function") {
+	if (selector instanceof DocumentFragment) {
+		return Vnode('!', attrs?.key, null, null, null, selector);
+	} else if (selector == null || typeof selector !== "string" && typeof selector !== "function" && typeof selector.view !== "function") {
 		throw Error("The selector must be either a string or a component.");
 	}
 	var vnode = hyperscriptVnode(attrs, children)
@@ -216,6 +218,7 @@ var _14 = function() {
 			vnode3.state = {}
 			if (vnode3.attrs != null) initLifecycle(vnode3.attrs, vnode3, hooks)
 			switch (tag) {
+				case "!": createDOM(parent, vnode3, nextSibling); break;
 				case "#": createText(parent, vnode3, nextSibling); break
 				case "<": createHTML(parent, vnode3, ns, nextSibling); break
 				case "[": createFragment(parent, vnode3, hooks, ns, nextSibling); break
@@ -251,6 +254,10 @@ var _14 = function() {
 			fragment.appendChild(child)
 		}
 		insertDOM(parent, fragment, nextSibling)
+	}
+	function createDOM(parent, vnode3, hooks, ns, nextSibling) {
+		// var fragment = getDocument(parent).createDocumentFragment()
+		insertDOM(vnode3.dom, nextSibling);
 	}
 	function createFragment(parent, vnode3, hooks, ns, nextSibling) {
 		var fragment = getDocument(parent).createDocumentFragment()
@@ -544,6 +551,7 @@ var _14 = function() {
 					updateLifecycle(vnode3.attrs, vnode3, hooks)
 				}
 				switch (oldTag) {
+					case "!": break;
 					case "#": updateText(old, vnode3); break
 					case "<": updateHTML(parent, old, vnode3, ns, nextSibling); break
 					case "[": updateFragment(parent, old, vnode3, hooks, nextSibling, ns); break
@@ -1037,13 +1045,17 @@ var _21 = function(render2, schedule, console) {
 	var pending = false
 	var offset = -1
 	function sync() {
+		performance.mark('mithril:sync:start');
 		for (offset = 0; offset < subscriptions.length; offset += 2) {
 			try { render2(subscriptions[offset], Vnode(subscriptions[offset + 1]), redraw) }
 			catch (e) { console.error(e) }
 		}
 		offset = -1
+		performance.mark('mithril:sync:end');
+		performance.measure('mithril:sync:duration', 'mithril:sync:start', 'mithril:sync:end')
 	}
 	function redraw() {
+		performance.mark('mithril:redraw:start');
 		if (!pending) {
 			pending = true
 			schedule(function() {
@@ -1051,9 +1063,12 @@ var _21 = function(render2, schedule, console) {
 				sync()
 			})
 		}
+		performance.mark('mithril:redraw:end');
+		performance.measure('mithril:redraw:duration', 'mithril:redraw:start', 'mithril:redraw:end')
 	}
 	redraw.sync = sync
 	function mount(root, component) {
+		performance.mark('mithril:mount:start');
 		if (component != null && component.view == null && typeof component !== "function") {
 			throw new TypeError("m.mount expects a component, not a vnode.")
 		}
@@ -1067,6 +1082,8 @@ var _21 = function(render2, schedule, console) {
 			subscriptions.push(root, component)
 			render2(root, Vnode(component), redraw)
 		}
+		performance.mark('mithril:mount:end');
+		performance.measure('mithril:mount:duration', 'mithril:mount:start', 'mithril:mount:end')
 	}
 	return {mount: mount, redraw: redraw}
 }
@@ -1692,7 +1709,13 @@ m.parsePathname = parsePathname
 m.buildPathname = buildPathname
 m.vnode = Vnode
 m.censor = censor
-m.domFor = domFor
-if (typeof module !== "undefined") module["exports"] = m
-else window.m = m
-}());
+m.domFor = domFor;
+
+export default m;
+
+// module.exports = m;
+// module.exports = {};
+// module.exports.default = m;
+// if (typeof module !== "undefined") module["exports"] = m
+// else window.m = m
+// }());
