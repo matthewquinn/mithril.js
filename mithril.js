@@ -123,9 +123,7 @@ function execSelector(state, vnode) {
 	return vnode
 }
 function hyperscript(selector, attrs, ...children) {
-	if (selector instanceof DocumentFragment) {
-		return Vnode('!', attrs?.key, null, null, null, selector);
-	} else if (selector == null || typeof selector !== "string" && typeof selector !== "function" && typeof selector.view !== "function") {
+	if (selector == null || typeof selector !== "string" && typeof selector !== "function" && typeof selector.view !== "function") {
 		throw Error("The selector must be either a string or a component.");
 	}
 	var vnode = hyperscriptVnode(attrs, children)
@@ -146,6 +144,16 @@ hyperscript.fragment = function(attrs4, ...children1) {
 	if (vnode2.attrs == null) vnode2.attrs = {}
 	vnode2.tag = "["
 	vnode2.children = Vnode.normalizeChildren(vnode2.children)
+	return vnode2
+}
+hyperscript.dom = function(dom) {
+	var vnode2 = hyperscriptVnode(undefined, []);
+
+	vnode2.tag = "!"
+	vnode2.attrs = {}
+	vnode2.dom = dom
+	vnode2.domSize = dom.childNodes.length
+	vnode2.children = []
 	return vnode2
 }
 var delayedRemoval = new WeakMap
@@ -256,8 +264,7 @@ var _14 = function() {
 		insertDOM(parent, fragment, nextSibling)
 	}
 	function createDOM(parent, vnode3, hooks, ns, nextSibling) {
-		// var fragment = getDocument(parent).createDocumentFragment()
-		insertDOM(vnode3.dom, nextSibling);
+		insertDOM(parent, vnode3.dom, nextSibling)
 	}
 	function createFragment(parent, vnode3, hooks, ns, nextSibling) {
 		var fragment = getDocument(parent).createDocumentFragment()
@@ -551,9 +558,9 @@ var _14 = function() {
 					updateLifecycle(vnode3.attrs, vnode3, hooks)
 				}
 				switch (oldTag) {
-					case "!": break;
 					case "#": updateText(old, vnode3); break
 					case "<": updateHTML(parent, old, vnode3, ns, nextSibling); break
+					case "!":
 					case "[": updateFragment(parent, old, vnode3, hooks, nextSibling, ns); break
 					default: updateElement(old, vnode3, hooks, ns)
 				}
@@ -748,11 +755,16 @@ var _14 = function() {
 		tryResumeRemove(parent, vnode3, counter)
 	}
 	function removeDOM(parent, vnode3) {
+		try {
 		if (vnode3.dom == null) return
 		if (vnode3.domSize == null || vnode3.domSize === 1) {
 			parent.removeChild(vnode3.dom)
 		} else {
 			for (var dom of domFor(vnode3)) parent.removeChild(dom)
+		}
+		} catch (err) {
+			console.log(err);
+			throw err;
 		}
 	}
 	function onremove(vnode3) {
@@ -1048,7 +1060,9 @@ var _21 = function(render2, schedule, console) {
 		performance.mark('mithril:sync:start');
 		for (offset = 0; offset < subscriptions.length; offset += 2) {
 			try { render2(subscriptions[offset], Vnode(subscriptions[offset + 1]), redraw) }
-			catch (e) { console.error(e) }
+			catch (e) {
+				console.error(e);
+			 }
 		}
 		offset = -1
 		performance.mark('mithril:sync:end');
@@ -1696,6 +1710,7 @@ var router = _31(typeof window !== "undefined" ? window : null, mountRedraw)
 var m = function m() { return hyperscript.apply(this, arguments) }
 m.m = hyperscript
 m.trust = hyperscript.trust
+m.dom = hyperscript.dom
 m.fragment = hyperscript.fragment
 m.Fragment = "["
 m.mount = mountRedraw.mount
