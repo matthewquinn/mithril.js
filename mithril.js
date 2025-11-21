@@ -152,7 +152,7 @@ hyperscript.dom = function(dom) {
 	vnode2.tag = "!"
 	vnode2.attrs = {}
 	vnode2.dom = dom
-	vnode2.domSize = dom.childNodes.length
+	vnode2.domSize = dom.length
 	vnode2.children = []
 	return vnode2
 }
@@ -264,7 +264,14 @@ var _14 = function() {
 		insertDOM(parent, fragment, nextSibling)
 	}
 	function createDOM(parent, vnode3, hooks, ns, nextSibling) {
-		insertDOM(parent, vnode3.dom, nextSibling)
+		vnode3.children = '';
+		vnode3.domSize = vnode3.dom.length;
+		var fragment = getDocument(parent).createDocumentFragment();
+		for (let i = 0; i < vnode3.dom.length; i++) {
+			fragment.appendChild(vnode3.dom[i].cloneNode(true));
+		}
+		vnode3.dom = fragment;
+		insertDOM(parent, fragment, nextSibling)
 	}
 	function createFragment(parent, vnode3, hooks, ns, nextSibling) {
 		var fragment = getDocument(parent).createDocumentFragment()
