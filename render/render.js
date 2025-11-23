@@ -66,8 +66,8 @@ module.exports = function() {
 			switch (tag) {
 				case "#": createText(parent, vnode, nextSibling); break
 				case "<": createHTML(parent, vnode, ns, nextSibling); break
-				case "!": createDOM(parent, vnode, ns, nextSibling); break
 				case "[": createFragment(parent, vnode, hooks, ns, nextSibling); break
+				case "!": createDOM(parent, vnode, ns, nextSibling); break
 				default: createElement(parent, vnode, hooks, ns, nextSibling)
 			}
 		}
@@ -111,14 +111,13 @@ module.exports = function() {
 		vnode.domSize = fragment.childNodes.length
 		insertDOM(parent, fragment, nextSibling)
 	}
-	function createDOM(parent, vnode, hooks, ns, nextSibling) {
+	function createDOM(parent, vnode, ns, nextSibling) {
 		var fragment = getDocument(parent).createDocumentFragment()
 		if (vnode.els != null) {
 			for (var i = 0; i < vnode.els.length; i++) {
 				fragment.appendChild(vnode.els[i].cloneNode(true))
 			}
 		}
-		vnode.tag = "!"
 		vnode.dom = fragment.firstChild
 		vnode.domSize = vnode.els.length
 		insertDOM(parent, fragment, nextSibling)
@@ -196,7 +195,6 @@ module.exports = function() {
 	 */
 	// This function diffs and patches lists of vnodes, both keyed and unkeyed.
 	//
-	// We will:
 	//
 	// 1. describe its general structure
 	// 2. focus on the diff algorithm optimizations
@@ -420,6 +418,7 @@ module.exports = function() {
 					case "#": updateText(old, vnode); break
 					case "<": updateHTML(parent, old, vnode, ns, nextSibling); break
 					case "[": updateFragment(parent, old, vnode, hooks, nextSibling, ns); break
+					case "!": updateDOM(parent, old, vnode, nextSibling); break
 					default: updateElement(old, vnode, hooks, ns)
 				}
 			}
@@ -460,6 +459,16 @@ module.exports = function() {
 			}
 		}
 		vnode.domSize = domSize
+	}
+	function updateDOM(parent, old, vnode, nextSibling, ns) {
+		if (old.els !== vnode.els) {
+			removeDOM(parent, old)
+			createDOM(parent, vnode, ns, nextSibling)
+		}
+		else {
+			vnode.dom = old.dom
+			vnode.domSize = old.domSize
+		}
 	}
 	function updateElement(old, vnode, hooks, ns) {
 		var element = vnode.dom = old.dom

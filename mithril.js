@@ -147,7 +147,7 @@ hyperscript.fragment = function(attrs4, ...children1) {
 	return vnode2
 }
 ;
-hyperscript.dom = function(attrs5, els) {
+hyperscript.dom = function(els) {
 	if (els == null)
 		return Vnode("<", undefined, undefined, "", undefined, undefined)
 	var children2 = []
@@ -155,7 +155,7 @@ hyperscript.dom = function(attrs5, els) {
 		children2.push(
 			Vnode(els[i].tagName, i, undefined, undefined, undefined, undefined)
 		)
-	var vnode3 = Vnode("!", attrs5.key, undefined, children2, undefined, undefined)
+	var vnode3 = Vnode("!", undefined, undefined, children2, undefined, undefined)
 	vnode3.els = els
 	return vnode3
 }
@@ -232,8 +232,8 @@ var _16 = function() {
 			switch (tag) {
 				case "#": createText(parent, vnode4, nextSibling); break
 				case "<": createHTML(parent, vnode4, ns, nextSibling); break
-				case "!": createDOM(parent, vnode4, ns, nextSibling); break
 				case "[": createFragment(parent, vnode4, hooks, ns, nextSibling); break
+				case "!": createDOM(parent, vnode4, ns, nextSibling); break
 				default: createElement(parent, vnode4, hooks, ns, nextSibling)
 			}
 		}
@@ -277,36 +277,35 @@ var _16 = function() {
 		vnode4.domSize = fragment.childNodes.length
 		insertDOM(parent, fragment, nextSibling)
 	}
-	function createDOM(parent, vnode4, hooks, ns, nextSibling) {
+	function createDOM(parent, vnode4, ns, nextSibling) {
 		var fragment = getDocument(parent).createDocumentFragment()
 		if (vnode4.els != null) {
 			for (var i = 0; i < vnode4.els.length; i++) {
 				fragment.appendChild(vnode4.els[i].cloneNode(true))
 			}
 		}
-		vnode4.tag = "!"
 		vnode4.dom = fragment.firstChild
 		vnode4.domSize = vnode4.els.length
 		insertDOM(parent, fragment, nextSibling)
 	}
 	function createElement(parent, vnode4, hooks, ns, nextSibling) {
 		var tag = vnode4.tag
-		var attrs6 = vnode4.attrs
+		var attrs5 = vnode4.attrs
 		var is = vnode4.is
 		ns = getNameSpace(vnode4) || ns
 		var element = ns ?
 			is ? getDocument(parent).createElementNS(ns, tag, {is: is}) : getDocument(parent).createElementNS(ns, tag) :
 			is ? getDocument(parent).createElement(tag, {is: is}) : getDocument(parent).createElement(tag)
 		vnode4.dom = element
-		if (attrs6 != null) {
-			setAttrs(vnode4, attrs6, ns)
+		if (attrs5 != null) {
+			setAttrs(vnode4, attrs5, ns)
 		}
 		insertDOM(parent, element, nextSibling)
 		if (!maybeSetContentEditable(vnode4)) {
 			if (vnode4.children != null) {
 				var children3 = vnode4.children
 				createNodes(element, children3, 0, children3.length, hooks, null, ns)
-				if (vnode4.tag === "select" && attrs6 != null) setLateSelectAttrs(vnode4, attrs6)
+				if (vnode4.tag === "select" && attrs5 != null) setLateSelectAttrs(vnode4, attrs5)
 			}
 		}
 	}
@@ -356,7 +355,6 @@ var _16 = function() {
 	 */
 	// This function diffs and patches lists of vnodes, both keyed and unkeyed.
 	//
-	// We will:
 	//
 	// 1. describe its general structure
 	// 2. focus on the diff algorithm optimizations
@@ -574,6 +572,7 @@ var _16 = function() {
 					case "#": updateText(old, vnode4); break
 					case "<": updateHTML(parent, old, vnode4, ns, nextSibling); break
 					case "[": updateFragment(parent, old, vnode4, hooks, nextSibling, ns); break
+					case "!": updateDOM(parent, old, vnode4, nextSibling); break
 					default: updateElement(old, vnode4, hooks, ns)
 				}
 			}
@@ -614,6 +613,16 @@ var _16 = function() {
 			}
 		}
 		vnode4.domSize = domSize
+	}
+	function updateDOM(parent, old, vnode4, nextSibling, ns) {
+		if (old.els !== vnode4.els) {
+			removeDOM(parent, old)
+			createDOM(parent, vnode4, ns, nextSibling)
+		}
+		else {
+			vnode4.dom = old.dom
+			vnode4.domSize = old.domSize
+		}
 	}
 	function updateElement(old, vnode4, hooks, ns) {
 		var element = vnode4.dom = old.dom
@@ -791,9 +800,9 @@ var _16 = function() {
 		}
 	}
 	//attrs
-	function setAttrs(vnode4, attrs6, ns) {
-		for (var key in attrs6) {
-			setAttr(vnode4, key, null, attrs6[key], ns)
+	function setAttrs(vnode4, attrs5, ns) {
+		for (var key in attrs5) {
+			setAttr(vnode4, key, null, attrs5[key], ns)
 		}
 	}
 	function setAttr(vnode4, key, old, value, ns) {
@@ -850,36 +859,36 @@ var _16 = function() {
 			if (old !== false) vnode4.dom.removeAttribute(key === "className" ? "class" : key)
 		}
 	}
-	function setLateSelectAttrs(vnode4, attrs6) {
-		if ("value" in attrs6) {
-			if(attrs6.value === null) {
+	function setLateSelectAttrs(vnode4, attrs5) {
+		if ("value" in attrs5) {
+			if(attrs5.value === null) {
 				if (vnode4.dom.selectedIndex !== -1) vnode4.dom.value = null
 			} else {
-				var normalized = "" + attrs6.value // eslint-disable-line no-implicit-coercion
+				var normalized = "" + attrs5.value // eslint-disable-line no-implicit-coercion
 				if (vnode4.dom.value !== normalized || vnode4.dom.selectedIndex === -1) {
 					vnode4.dom.value = normalized
 				}
 			}
 		}
-		if ("selectedIndex" in attrs6) setAttr(vnode4, "selectedIndex", null, attrs6.selectedIndex, undefined)
+		if ("selectedIndex" in attrs5) setAttr(vnode4, "selectedIndex", null, attrs5.selectedIndex, undefined)
 	}
-	function updateAttrs(vnode4, old, attrs6, ns) {
+	function updateAttrs(vnode4, old, attrs5, ns) {
 		// Some attributes may NOT be case-sensitive (e.g. data-***),
 		// so removal should be done first to prevent accidental removal for newly setting values.
 		var val
 		if (old != null) {
-			if (old === attrs6 && !cachedAttrsIsStaticMap.has(attrs6)) {
+			if (old === attrs5 && !cachedAttrsIsStaticMap.has(attrs5)) {
 				console.warn("Don't reuse attrs object, use new object for every redraw, this will throw in next major")
 			}
 			for (var key in old) {
-				if (((val = old[key]) != null) && (attrs6 == null || attrs6[key] == null)) {
+				if (((val = old[key]) != null) && (attrs5 == null || attrs5[key] == null)) {
 					removeAttr(vnode4, key, val, ns)
 				}
 			}
 		}
-		if (attrs6 != null) {
-			for (var key in attrs6) {
-				setAttr(vnode4, key, old && old[key], attrs6[key], ns)
+		if (attrs5 != null) {
+			for (var key in attrs5) {
+				setAttr(vnode4, key, old && old[key], attrs5[key], ns)
 			}
 		}
 	}
@@ -1098,6 +1107,7 @@ var _23 = function(render2, schedule, console) {
 	return {mount: mount, redraw: redraw}
 }
 var mountRedraw = _23(render, typeof requestAnimationFrame !== "undefined" ? requestAnimationFrame : null, typeof console !== "undefined" ? console : null)
+//
 var buildQueryString = function(object) {
 	if (Object.prototype.toString.call(object) !== "[object Object]") return ""
 	var args = []
@@ -1327,6 +1337,7 @@ var _27 = function($window, oncompletion) {
 	}
 }
 var request = _27(typeof window !== "undefined" ? window : null, mountRedraw.redraw)
+//
 /*
 Percent encodings encode UTF-8 bytes, so this regexp needs to match that.
 Here's how UTF-8 encodes stuff:
@@ -1476,18 +1487,18 @@ var compileTemplate = function(template) {
 // }
 // ```
 var magic = /^(?:key|oninit|oncreate|onbeforeupdate|onupdate|onbeforeremove|onremove)$/
-var censor = function(attrs8, extras) {
+var censor = function(attrs7, extras) {
 	var result2 = {}
 	if (extras != null) {
-		for (var key6 in attrs8) {
-			if (hasOwn.call(attrs8, key6) && !magic.test(key6) && extras.indexOf(key6) < 0) {
-				result2[key6] = attrs8[key6]
+		for (var key6 in attrs7) {
+			if (hasOwn.call(attrs7, key6) && !magic.test(key6) && extras.indexOf(key6) < 0) {
+				result2[key6] = attrs7[key6]
 			}
 		}
 	} else {
-		for (var key6 in attrs8) {
-			if (hasOwn.call(attrs8, key6) && !magic.test(key6)) {
-				result2[key6] = attrs8[key6]
+		for (var key6 in attrs7) {
+			if (hasOwn.call(attrs7, key6) && !magic.test(key6)) {
+				result2[key6] = attrs7[key6]
 			}
 		}
 	}
@@ -1499,7 +1510,7 @@ var _33 = function($window, mountRedraw0) {
 	var ready = false
 	var hasBeenResolved = false
 	var dom0, compiled, fallbackRoute
-	var currentResolver, component, attrs7, currentPath, lastUpdate
+	var currentResolver, component, attrs6, currentPath, lastUpdate
 	var RouterRoot = {
 		onremove: function() {
 			ready = hasBeenResolved = false
@@ -1509,7 +1520,7 @@ var _33 = function($window, mountRedraw0) {
 			// The route has already been resolved.
 			// Therefore, the following early return is not needed.
 			// if (!hasBeenResolved) return
-			var vnode7 = Vnode(component, attrs7.key, attrs7)
+			var vnode7 = Vnode(component, attrs6.key, attrs6)
 			if (currentResolver) return currentResolver.render(vnode7)
 			// Wrap in a fragment to preserve existing key semantics
 			return [vnode7]
@@ -1546,7 +1557,7 @@ var _33 = function($window, mountRedraw0) {
 						if (update !== lastUpdate) return
 						if (comp === SKIP) return loop(i + 1)
 						component = comp != null && (typeof comp.view === "function" || typeof comp === "function")? comp : "div"
-						attrs7 = data.params, currentPath = path0, lastUpdate = null
+						attrs6 = data.params, currentPath = path0, lastUpdate = null
 						currentResolver = payload.render ? payload : null
 						if (hasBeenResolved) mountRedraw0.redraw()
 						else {
@@ -1698,7 +1709,7 @@ var _33 = function($window, mountRedraw0) {
 		},
 	}
 	route.param = function(key3) {
-		return attrs7 && key3 != null ? attrs7[key3] : attrs7
+		return attrs6 && key3 != null ? attrs6[key3] : attrs6
 	}
 	return route
 }
@@ -1710,14 +1721,14 @@ m.fragment = hyperscript.fragment
 m.dom = hyperscript.dom
 m.Fragment = "["
 m.mount = mountRedraw.mount
-m.route = router
+//m.route = router
 m.render = render
 m.redraw = mountRedraw.redraw
-m.request = request.request
-m.parseQueryString = parseQueryString
-m.buildQueryString = buildQueryString
-m.parsePathname = parsePathname
-m.buildPathname = buildPathname
+//m.request = request.request
+//m.parseQueryString = parseQueryString
+//m.buildQueryString = buildQueryString
+//m.parsePathname = parsePathname
+//m.buildPathname = buildPathname
 m.vnode = Vnode
 m.censor = censor
 m.domFor = domFor
