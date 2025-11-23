@@ -66,6 +66,7 @@ module.exports = function() {
 			switch (tag) {
 				case "#": createText(parent, vnode, nextSibling); break
 				case "<": createHTML(parent, vnode, ns, nextSibling); break
+				case "!": createDOM(parent, vnode, ns, nextSibling); break
 				case "[": createFragment(parent, vnode, hooks, ns, nextSibling); break
 				default: createElement(parent, vnode, hooks, ns, nextSibling)
 			}
@@ -108,6 +109,18 @@ module.exports = function() {
 		}
 		vnode.dom = fragment.firstChild
 		vnode.domSize = fragment.childNodes.length
+		insertDOM(parent, fragment, nextSibling)
+	}
+	function createDOM(parent, vnode, hooks, ns, nextSibling) {
+		var fragment = getDocument(parent).createDocumentFragment()
+		if (vnode.els != null) {
+			for (var i = 0; i < vnode.els.length; i++) {
+				fragment.appendChild(vnode.els[i].cloneNode(true))
+			}
+		}
+		vnode.tag = "!"
+		vnode.dom = fragment.firstChild
+		vnode.domSize = vnode.els.length
 		insertDOM(parent, fragment, nextSibling)
 	}
 	function createElement(parent, vnode, hooks, ns, nextSibling) {

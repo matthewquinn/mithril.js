@@ -9,6 +9,7 @@ var m = function m() { return hyperscript.apply(this, arguments) }
 m.m = hyperscript
 m.trust = hyperscript.trust
 m.fragment = hyperscript.fragment
+m.dom = hyperscript.dom
 m.Fragment = "["
 m.mount = mountRedraw.mount
 m.route = router
