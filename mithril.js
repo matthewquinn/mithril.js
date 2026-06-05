@@ -1,7 +1,6 @@
-;(function() {
 "use strict"
 function Vnode(tag, key, attrs0, children, text, dom) {
-	return {tag: tag, key: key, attrs: attrs0, children: children, text: text, dom: dom, is: undefined, domSize: undefined, state: undefined, events: undefined, instance: undefined}
+	return {tag: tag, key: key, attrs: attrs0, children: children, text: text, dom: dom, is: undefined, domSize: undefined, state: undefined, events: undefined, instance: undefined, persist: undefined}
 }
 Vnode.normalize = function(node) {
 	if (Array.isArray(node)) return Vnode("[", undefined, undefined, Vnode.normalizeChildren(node), undefined, undefined)
@@ -147,16 +146,17 @@ hyperscript.fragment = function(attrs4, ...children1) {
 	return vnode2
 }
 ;
-hyperscript.dom = function(els) {
-	if (els == null)
+hyperscript.dom = function(fragment) {
+	if (fragment == null)
 		return Vnode("<", undefined, undefined, "", undefined, undefined)
 	var children2 = []
-	for (var i = 0; i < els.length; i++)
+	for (var i = 0; i < fragment.dom.length; i++)
 		children2.push(
-			Vnode(els[i].tagName, i, undefined, undefined, undefined, undefined)
+			Vnode(fragment.dom[i].tagName, i, undefined, undefined, undefined, undefined)
 		)
 	var vnode3 = Vnode("!", undefined, undefined, children2, undefined, undefined)
-	vnode3.els = els
+	vnode3.els = fragment.dom;
+	vnode3.persist = fragment.persist;
 	return vnode3
 }
 ;
@@ -277,15 +277,35 @@ var _16 = function() {
 		vnode4.domSize = fragment.childNodes.length
 		insertDOM(parent, fragment, nextSibling)
 	}
+	/**
+	 * This DOM API is intended to work with Longform fragments
+	 * which have semantics of "unique" fragments. A unique fragment
+	 * should only appear once in a document, so we can use the
+	 * moveBefore API on them. The unique value is passed through
+	 * using a persist flag on the vnode.
+	 *
+	 * Other fragment types
+	 */
+	var supportsMoveBefore = "moveBefore" in document;
 	function createDOM(parent, vnode4, ns, nextSibling) {
-		var fragment = getDocument(parent).createDocumentFragment()
-		if (vnode4.els != null) {
-			for (var i = 0; i < vnode4.els.length; i++) {
-				fragment.appendChild(vnode4.els[i].cloneNode(true))
-			}
-		}
-		vnode4.dom = fragment.firstChild
+		var node;
+		var last = nextSibling;
+		var document = getDocument(parent);
+		var commonAncestor = document.contains(parent) && document.contains(vnode4.els[0]);
+		vnode4.dom = vnode4.els[0];
 		vnode4.domSize = vnode4.els.length
+		if (vnode4.persist && commonAncestor && supportsMoveBefore) {
+			for (var i = vnode4.els.length - 1; i > -1; i--) {
+				node = vnode4.els[i];
+				parent.moveBefore(node, last);
+				last = node;
+			}
+			return;
+		}
+		var fragment = getDocument(parent).createDocumentFragment()
+		for (var i = 0; i < vnode4.els.length; i++) {
+			fragment.appendChild(vnode4.els[i]);
+		}
 		insertDOM(parent, fragment, nextSibling)
 	}
 	function createElement(parent, vnode4, hooks, ns, nextSibling) {
@@ -728,7 +748,9 @@ var _16 = function() {
 		}
 	}
 	function insertDOM(parent, dom, nextSibling) {
-		if (nextSibling != null) parent.insertBefore(dom, nextSibling)
+		if (nextSibling != null) {
+			parent.insertBefore(dom, nextSibling);
+		}
 		else parent.appendChild(dom)
 	}
 	function maybeSetContentEditable(vnode4) {
@@ -777,6 +799,8 @@ var _16 = function() {
 	}
 	function removeDOM(parent, vnode4) {
 		if (vnode4.dom == null) return
+		// if parent does not contains moveBefore likely has run on the child
+		if (vnode4.persist && !parent.contains(vnode4.dom)) return;
 		if (vnode4.domSize == null || vnode4.domSize === 1) {
 			parent.removeChild(vnode4.dom)
 		} else {
@@ -1107,363 +1131,16 @@ var _23 = function(render2, schedule, console) {
 	return {mount: mount, redraw: redraw}
 }
 var mountRedraw = _23(render, typeof requestAnimationFrame !== "undefined" ? requestAnimationFrame : null, typeof console !== "undefined" ? console : null)
-//
-var buildQueryString = function(object) {
-	if (Object.prototype.toString.call(object) !== "[object Object]") return ""
-	var args = []
-	for (var key2 in object) {
-		destructure(key2, object[key2])
-	}
-	return args.join("&")
-	function destructure(key2, value1) {
-		if (Array.isArray(value1)) {
-			for (var i = 0; i < value1.length; i++) {
-				destructure(key2 + "[" + i + "]", value1[i])
-			}
-		}
-		else if (Object.prototype.toString.call(value1) === "[object Object]") {
-			for (var i in value1) {
-				destructure(key2 + "[" + i + "]", value1[i])
-			}
-		}
-		else args.push(encodeURIComponent(key2) + (value1 != null && value1 !== "" ? "=" + encodeURIComponent(value1) : ""))
-	}
-}
-// Returns `path` from `template` + `params`
-var buildPathname = function(template, params) {
-	if ((/:([^\/\.-]+)(\.{3})?:/).test(template)) {
-		throw new SyntaxError("Template parameter names must be separated by either a '/', '-', or '.'.")
-	}
-	if (params == null) return template
-	var queryIndex = template.indexOf("?")
-	var hashIndex = template.indexOf("#")
-	var queryEnd = hashIndex < 0 ? template.length : hashIndex
-	var pathEnd = queryIndex < 0 ? queryEnd : queryIndex
-	var path = template.slice(0, pathEnd)
-	var query = {}
-	Object.assign(query, params)
-	var resolved = path.replace(/:([^\/\.-]+)(\.{3})?/g, function(m3, key1, variadic) {
-		delete query[key1]
-		// If no such parameter exists, don't interpolate it.
-		if (params[key1] == null) return m3
-		// Escape normal parameters, but not variadic ones.
-		return variadic ? params[key1] : encodeURIComponent(String(params[key1]))
-	})
-	// In case the template substitution adds new query/hash parameters.
-	var newQueryIndex = resolved.indexOf("?")
-	var newHashIndex = resolved.indexOf("#")
-	var newQueryEnd = newHashIndex < 0 ? resolved.length : newHashIndex
-	var newPathEnd = newQueryIndex < 0 ? newQueryEnd : newQueryIndex
-	var result0 = resolved.slice(0, newPathEnd)
-	if (queryIndex >= 0) result0 += template.slice(queryIndex, queryEnd)
-	if (newQueryIndex >= 0) result0 += (queryIndex < 0 ? "?" : "&") + resolved.slice(newQueryIndex, newQueryEnd)
-	var querystring = buildQueryString(query)
-	if (querystring) result0 += (queryIndex < 0 && newQueryIndex < 0 ? "?" : "&") + querystring
-	if (hashIndex >= 0) result0 += template.slice(hashIndex)
-	if (newHashIndex >= 0) result0 += (hashIndex < 0 ? "" : "&") + resolved.slice(newHashIndex)
-	return result0
-}
-var _27 = function($window, oncompletion) {
-	function PromiseProxy(executor) {
-		return new Promise(executor)
-	}
-	function makeRequest(url, args) {
-		return new Promise(function(resolve, reject) {
-			url = buildPathname(url, args.params)
-			var method = args.method != null ? args.method.toUpperCase() : "GET"
-			var body = args.body
-			var assumeJSON = (args.serialize == null || args.serialize === JSON.serialize) && !(body instanceof $window.FormData || body instanceof $window.URLSearchParams)
-			var responseType = args.responseType || (typeof args.extract === "function" ? "" : "json")
-			var xhr = new $window.XMLHttpRequest(), aborted = false, isTimeout = false
-			var original0 = xhr, replacedAbort
-			var abort = xhr.abort
-			xhr.abort = function() {
-				aborted = true
-				abort.call(this)
-			}
-			xhr.open(method, url, args.async !== false, typeof args.user === "string" ? args.user : undefined, typeof args.password === "string" ? args.password : undefined)
-			if (assumeJSON && body != null && !hasHeader(args, "content-type")) {
-				xhr.setRequestHeader("Content-Type", "application/json; charset=utf-8")
-			}
-			if (typeof args.deserialize !== "function" && !hasHeader(args, "accept")) {
-				xhr.setRequestHeader("Accept", "application/json, text/*")
-			}
-			if (args.withCredentials) xhr.withCredentials = args.withCredentials
-			if (args.timeout) xhr.timeout = args.timeout
-			xhr.responseType = responseType
-			for (var key0 in args.headers) {
-				if (hasOwn.call(args.headers, key0)) {
-					xhr.setRequestHeader(key0, args.headers[key0])
-				}
-			}
-			xhr.onreadystatechange = function(ev) {
-				// Don't throw errors on xhr.abort().
-				if (aborted) return
-				if (ev.target.readyState === 4) {
-					try {
-						var success = (ev.target.status >= 200 && ev.target.status < 300) || ev.target.status === 304 || (/^file:\/\//i).test(url)
-						// When the response type isn't "" or "text",
-						// `xhr.responseText` is the wrong thing to use.
-						// Browsers do the right thing and throw here, and we
-						// should honor that and do the right thing by
-						// preferring `xhr.response` where possible/practical.
-						var response = ev.target.response, message
-						if (responseType === "json") {
-							// For IE and Edge, which don't implement
-							// `responseType: "json"`.
-							if (!ev.target.responseType && typeof args.extract !== "function") {
-								// Handle no-content which will not parse.
-								try { response = JSON.parse(ev.target.responseText) }
-								catch (e) { response = null }
-							}
-						} else if (!responseType || responseType === "text") {
-							// Only use this default if it's text. If a parsed
-							// document is needed on old IE and friends (all
-							// unsupported), the user should use a custom
-							// `config` instead. They're already using this at
-							// their own risk.
-							if (response == null) response = ev.target.responseText
-						}
-						if (typeof args.extract === "function") {
-							response = args.extract(ev.target, args)
-							success = true
-						} else if (typeof args.deserialize === "function") {
-							response = args.deserialize(response)
-						}
-						if (success) {
-							if (typeof args.type === "function") {
-								if (Array.isArray(response)) {
-									for (var i = 0; i < response.length; i++) {
-										response[i] = new args.type(response[i])
-									}
-								}
-								else response = new args.type(response)
-							}
-							resolve(response)
-						}
-						else {
-							var completeErrorResponse = function() {
-								try { message = ev.target.responseText }
-								catch (e) { message = response }
-								var error = new Error(message)
-								error.code = ev.target.status
-								error.response = response
-								reject(error)
-							}
-							if (xhr.status === 0) {
-								// Use setTimeout to push this code block onto the event queue
-								// This allows `xhr.ontimeout` to run in the case that there is a timeout
-								// Without this setTimeout, `xhr.ontimeout` doesn't have a chance to reject
-								// as `xhr.onreadystatechange` will run before it
-								setTimeout(function() {
-									if (isTimeout) return
-									completeErrorResponse()
-								})
-							} else completeErrorResponse()
-						}
-					}
-					catch (e) {
-						reject(e)
-					}
-				}
-			}
-			xhr.ontimeout = function (ev) {
-				isTimeout = true
-				var error = new Error("Request timed out")
-				error.code = ev.target.status
-				reject(error)
-			}
-			if (typeof args.config === "function") {
-				xhr = args.config(xhr, args, url) || xhr
-				// Propagate the `abort` to any replacement XHR as well.
-				if (xhr !== original0) {
-					replacedAbort = xhr.abort
-					xhr.abort = function() {
-						aborted = true
-						replacedAbort.call(this)
-					}
-				}
-			}
-			if (body == null) xhr.send()
-			else if (typeof args.serialize === "function") xhr.send(args.serialize(body))
-			else if (body instanceof $window.FormData || body instanceof $window.URLSearchParams) xhr.send(body)
-			else xhr.send(JSON.stringify(body))
-		})
-	}
-	// In case the global Promise is some userland library's where they rely on
-	// `foo instanceof this.constructor`, `this.constructor.resolve(value)`, or
-	// similar. Let's *not* break them.
-	PromiseProxy.prototype = Promise.prototype
-	PromiseProxy.__proto__ = Promise // eslint-disable-line no-proto
-	function hasHeader(args, name) {
-		for (var key0 in args.headers) {
-			if (hasOwn.call(args.headers, key0) && key0.toLowerCase() === name) return true
-		}
-		return false
-	}
-	return {
-		request: function(url, args) {
-			if (typeof url !== "string") { args = url; url = url.url }
-			else if (args == null) args = {}
-			var promise = makeRequest(url, args)
-			if (args.background === true) return promise
-			var count = 0
-			function complete() {
-				if (--count === 0 && typeof oncompletion === "function") oncompletion()
-			}
-			return wrap(promise)
-			function wrap(promise) {
-				var then = promise.then
-				// Set the constructor, so engines know to not await or resolve
-				// this as a native promise. At the time of writing, this is
-				// only necessary for V8, but their behavior is the correct
-				// behavior per spec. See this spec issue for more details:
-				// https://github.com/tc39/ecma262/issues/1577. Also, see the
-				// corresponding comment in `request/tests/test-request.js` for
-				// a bit more background on the issue at hand.
-				promise.constructor = PromiseProxy
-				promise.then = function() {
-					count++
-					var next = then.apply(promise, arguments)
-					next.then(complete, function(e) {
-						complete()
-						if (count === 0) throw e
-					})
-					return wrap(next)
-				}
-				return promise
-			}
-		}
-	}
-}
-var request = _27(typeof window !== "undefined" ? window : null, mountRedraw.redraw)
-//
-/*
-Percent encodings encode UTF-8 bytes, so this regexp needs to match that.
-Here's how UTF-8 encodes stuff:
-- `00-7F`: 1-byte, for U+0000-U+007F
-- `C2-DF 80-BF`: 2-byte, for U+0080-U+07FF
-- `E0-EF 80-BF 80-BF`: 3-byte, encodes U+0800-U+FFFF
-- `F0-F4 80-BF 80-BF 80-BF`: 4-byte, encodes U+10000-U+10FFFF
-In this, there's a number of invalid byte sequences:
-- `80-BF`: Continuation byte, invalid as start
-- `C0-C1 80-BF`: Overlong encoding for U+0000-U+007F
-- `E0 80-9F 80-BF`: Overlong encoding for U+0080-U+07FF
-- `ED A0-BF 80-BF`: Encoding for UTF-16 surrogate U+D800-U+DFFF
-- `F0 80-8F 80-BF 80-BF`: Overlong encoding for U+0800-U+FFFF
-- `F4 90-BF`: RFC 3629 restricted UTF-8 to only code points UTF-16 could encode.
-- `F5-FF`: RFC 3629 restricted UTF-8 to only code points UTF-16 could encode.
-So in reality, only the following sequences can encode are valid characters:
-- 00-7F
-- C2-DF 80-BF
-- E0    A0-BF 80-BF
-- E1-EC 80-BF 80-BF
-- ED    80-9F 80-BF
-- EE-EF 80-BF 80-BF
-- F0    90-BF 80-BF 80-BF
-- F1-F3 80-BF 80-BF 80-BF
-- F4    80-8F 80-BF 80-BF
-The regexp just tries to match this as compactly as possible.
-*/
-var validUtf8Encodings = /%(?:[0-7]|(?!c[01]|e0%[89]|ed%[ab]|f0%8|f4%[9ab])(?:c|d|(?:e|f[0-4]%[89ab])[\da-f]%[89ab])[\da-f]%[89ab])[\da-f]/gi
-var decodeURIComponentSafe = function(str) {
-	return String(str).replace(validUtf8Encodings, decodeURIComponent)
-}
-var parseQueryString = function(string) {
-	if (string === "" || string == null) return {}
-	if (string.charAt(0) === "?") string = string.slice(1)
-	var entries = string.split("&"), counters = {}, data0 = {}
-	for (var i = 0; i < entries.length; i++) {
-		var entry = entries[i].split("=")
-		var key4 = decodeURIComponentSafe(entry[0])
-		var value2 = entry.length === 2 ? decodeURIComponentSafe(entry[1]) : ""
-		if (value2 === "true") value2 = true
-		else if (value2 === "false") value2 = false
-		var levels = key4.split(/\]\[?|\[/)
-		var cursor = data0
-		if (key4.indexOf("[") > -1) levels.pop()
-		for (var j0 = 0; j0 < levels.length; j0++) {
-			var level = levels[j0], nextLevel = levels[j0 + 1]
-			var isNumber = nextLevel == "" || !isNaN(parseInt(nextLevel, 10))
-			if (level === "") {
-				var key4 = levels.slice(0, j0).join()
-				if (counters[key4] == null) {
-					counters[key4] = Array.isArray(cursor) ? cursor.length : 0
-				}
-				level = counters[key4]++
-			}
-			// Disallow direct prototype pollution
-			else if (level === "__proto__") break
-			if (j0 === levels.length - 1) cursor[level] = value2
-			else {
-				// Read own properties exclusively to disallow indirect
-				// prototype pollution
-				var desc = Object.getOwnPropertyDescriptor(cursor, level)
-				if (desc != null) desc = desc.value
-				if (desc == null) cursor[level] = desc = isNumber ? [] : {}
-				cursor = desc
-			}
-		}
-	}
-	return data0
-}
-// Returns `{path, params}` from `url`
-var parsePathname = function(url) {
-	var queryIndex0 = url.indexOf("?")
-	var hashIndex0 = url.indexOf("#")
-	var queryEnd0 = hashIndex0 < 0 ? url.length : hashIndex0
-	var pathEnd0 = queryIndex0 < 0 ? queryEnd0 : queryIndex0
-	var path1 = url.slice(0, pathEnd0).replace(/\/{2,}/g, "/")
-	if (!path1) path1 = "/"
-	else {
-		if (path1[0] !== "/") path1 = "/" + path1
-	}
-	return {
-		path: path1,
-		params: queryIndex0 < 0
-			? {}
-			: parseQueryString(url.slice(queryIndex0 + 1, queryEnd0)),
-	}
-}
-// Compiles a template into a function that takes a resolved path (without query
-// strings) and returns an object containing the template parameters with their
-// parsed values. This expects the input of the compiled template to be the
-// output of `parsePathname`. Note that it does *not* remove query parameters
-// specified in the template.
-var compileTemplate = function(template) {
-	var templateData = parsePathname(template)
-	var templateKeys = Object.keys(templateData.params)
-	var keys = []
-	var regexp = new RegExp("^" + templateData.path.replace(
-		// I escape literal text so people can use things like `:file.:ext` or
-		// `:lang-:locale` in routes. This is all merged into one pass so I
-		// don't also accidentally escape `-` and make it harder to detect it to
-		// ban it from template parameters.
-		/:([^\/.-]+)(\.{3}|\.(?!\.)|-)?|[\\^$*+.()|\[\]{}]/g,
-		function(m4, key5, extra) {
-			if (key5 == null) return "\\" + m4
-			keys.push({k: key5, r: extra === "..."})
-			if (extra === "...") return "(.*)"
-			if (extra === ".") return "([^/]+)\\."
-			return "([^/]+)" + (extra || "")
-		}
-	) + "\\/?$")
-	return function(data1) {
-		// First, check the params. Usually, there isn't any, and it's just
-		// checking a static set.
-		for (var i = 0; i < templateKeys.length; i++) {
-			if (templateData.params[templateKeys[i]] !== data1.params[templateKeys[i]]) return false
-		}
-		// If no interpolations exist, let's skip all the ceremony
-		if (!keys.length) return regexp.test(data1.path)
-		var values = regexp.exec(data1.path)
-		if (values == null) return false
-		for (var i = 0; i < keys.length; i++) {
-			data1.params[keys[i].k] = keys[i].r ? values[i + 1] : decodeURIComponent(values[i + 1])
-		}
-		return true
-	}
-}
+var m = function m() { return hyperscript.apply(this, arguments) }
+m.m = hyperscript
+m.trust = hyperscript.trust
+m.fragment = hyperscript.fragment
+m.dom = hyperscript.dom
+m.Fragment = "["
+m.mount = mountRedraw.mount
+m.render = render
+m.redraw = mountRedraw.redraw
+m.vnode = Vnode
 // Note: this is mildly perf-sensitive.
 //
 // It does *not* use `delete` - dynamic `delete`s usually cause objects to bail
@@ -1479,7 +1156,7 @@ var compileTemplate = function(template) {
 //     "key", "oninit", "oncreate", "onbeforeupdate", "onupdate",
 //     "onbeforeremove", "onremove",
 // ]
-// var censor = (attrs, extras) => {
+// m.censor = (attrs, extras) => {
 //     const result = Object.assign(Object.create(null), attrs)
 //     for (const key of magic) delete result[key]
 //     if (extras != null) for (const key of extras) delete result[key]
@@ -1487,251 +1164,24 @@ var compileTemplate = function(template) {
 // }
 // ```
 var magic = /^(?:key|oninit|oncreate|onbeforeupdate|onupdate|onbeforeremove|onremove)$/
-var censor = function(attrs7, extras) {
-	var result2 = {}
+m.censor = function(attrs6, extras) {
+	var result0 = {}
 	if (extras != null) {
-		for (var key6 in attrs7) {
-			if (hasOwn.call(attrs7, key6) && !magic.test(key6) && extras.indexOf(key6) < 0) {
-				result2[key6] = attrs7[key6]
+		for (var key0 in attrs6) {
+			if (hasOwn.call(attrs6, key0) && !magic.test(key0) && extras.indexOf(key0) < 0) {
+				result0[key0] = attrs6[key0]
 			}
 		}
 	} else {
-		for (var key6 in attrs7) {
-			if (hasOwn.call(attrs7, key6) && !magic.test(key6)) {
-				result2[key6] = attrs7[key6]
+		for (var key0 in attrs6) {
+			if (hasOwn.call(attrs6, key0) && !magic.test(key0)) {
+				result0[key0] = attrs6[key0]
 			}
 		}
 	}
-	return result2
+	return result0
 }
-var _33 = function($window, mountRedraw0) {
-	var p = Promise.resolve()
-	var scheduled = false
-	var ready = false
-	var hasBeenResolved = false
-	var dom0, compiled, fallbackRoute
-	var currentResolver, component, attrs6, currentPath, lastUpdate
-	var RouterRoot = {
-		onremove: function() {
-			ready = hasBeenResolved = false
-			$window.removeEventListener("popstate", fireAsync, false)
-		},
-		view: function() {
-			// The route has already been resolved.
-			// Therefore, the following early return is not needed.
-			// if (!hasBeenResolved) return
-			var vnode7 = Vnode(component, attrs6.key, attrs6)
-			if (currentResolver) return currentResolver.render(vnode7)
-			// Wrap in a fragment to preserve existing key semantics
-			return [vnode7]
-		},
-	}
-	var SKIP = route.SKIP = {}
-	function resolveRoute() {
-		scheduled = false
-		// Consider the pathname holistically. The prefix might even be invalid,
-		// but that's not our problem.
-		var prefix = $window.location.hash
-		if (route.prefix[0] !== "#") {
-			prefix = $window.location.search + prefix
-			if (route.prefix[0] !== "?") {
-				prefix = $window.location.pathname + prefix
-				if (prefix[0] !== "/") prefix = "/" + prefix
-			}
-		}
-		var path0 = decodeURIComponentSafe(prefix).slice(route.prefix.length)
-		var data = parsePathname(path0)
-		Object.assign(data.params, $window.history.state)
-		function reject(e) {
-			console.error(e)
-			route.set(fallbackRoute, null, {replace: true})
-		}
-		loop(0)
-		function loop(i) {
-			for (; i < compiled.length; i++) {
-				if (compiled[i].check(data)) {
-					var payload = compiled[i].component
-					var matchedRoute = compiled[i].route
-					var localComp = payload
-					var update = lastUpdate = function(comp) {
-						if (update !== lastUpdate) return
-						if (comp === SKIP) return loop(i + 1)
-						component = comp != null && (typeof comp.view === "function" || typeof comp === "function")? comp : "div"
-						attrs6 = data.params, currentPath = path0, lastUpdate = null
-						currentResolver = payload.render ? payload : null
-						if (hasBeenResolved) mountRedraw0.redraw()
-						else {
-							hasBeenResolved = true
-							mountRedraw0.mount(dom0, RouterRoot)
-						}
-					}
-					// There's no understating how much I *wish* I could
-					// use `async`/`await` here...
-					if (payload.view || typeof payload === "function") {
-						payload = {}
-						update(localComp)
-					}
-					else if (payload.onmatch) {
-						p.then(function () {
-							return payload.onmatch(data.params, path0, matchedRoute)
-						}).then(update, path0 === fallbackRoute ? null : reject)
-					}
-					else update(/* "div" */)
-					return
-				}
-			}
-			if (path0 === fallbackRoute) {
-				throw new Error("Could not resolve default route " + fallbackRoute + ".")
-			}
-			route.set(fallbackRoute, null, {replace: true})
-		}
-	}
-	function fireAsync() {
-		if (!scheduled) {
-			scheduled = true
-			// TODO: just do `mountRedraw.redraw()` here and elide the timer
-			// dependency. Note that this will muck with tests a *lot*, so it's
-			// not as easy of a change as it sounds.
-			setTimeout(resolveRoute)
-		}
-	}
-	function route(root, defaultRoute, routes) {
-		if (!root) throw new TypeError("DOM element being rendered to does not exist.")
-		compiled = Object.keys(routes).map(function(route) {
-			if (route[0] !== "/") throw new SyntaxError("Routes must start with a '/'.")
-			if ((/:([^\/\.-]+)(\.{3})?:/).test(route)) {
-				throw new SyntaxError("Route parameter names must be separated with either '/', '.', or '-'.")
-			}
-			return {
-				route: route,
-				component: routes[route],
-				check: compileTemplate(route),
-			}
-		})
-		fallbackRoute = defaultRoute
-		if (defaultRoute != null) {
-			var defaultData = parsePathname(defaultRoute)
-			if (!compiled.some(function (i) { return i.check(defaultData) })) {
-				throw new ReferenceError("Default route doesn't match any known routes.")
-			}
-		}
-		dom0 = root
-		$window.addEventListener("popstate", fireAsync, false)
-		ready = true
-		// The RouterRoot component is mounted when the route is first resolved.
-		resolveRoute()
-	}
-	route.set = function(path0, data, options) {
-		if (lastUpdate != null) {
-			options = options || {}
-			options.replace = true
-		}
-		lastUpdate = null
-		path0 = buildPathname(path0, data)
-		if (ready) {
-			fireAsync()
-			var state = options ? options.state : null
-			var title = options ? options.title : null
-			if (options && options.replace) $window.history.replaceState(state, title, route.prefix + path0)
-			else $window.history.pushState(state, title, route.prefix + path0)
-		}
-		else {
-			$window.location.href = route.prefix + path0
-		}
-	}
-	route.get = function() {return currentPath}
-	route.prefix = "#!"
-	route.Link = {
-		view: function(vnode7) {
-			// Omit the used parameters from the rendered element - they are
-			// internal. Also, censor the various lifecycle methods.
-			//
-			// We don't strip the other parameters because for convenience we
-			// let them be specified in the selector as well.
-			var child0 = hyperscript(
-				vnode7.attrs.selector || "a",
-				censor(vnode7.attrs, ["options", "params", "selector", "onclick"]),
-				vnode7.children
-			)
-			var options, onclick, href
-			// Let's provide a *right* way to disable a route link, rather than
-			// letting people screw up accessibility on accident.
-			//
-			// The attribute is coerced so users don't get surprised over
-			// `disabled: 0` resulting in a button that's somehow routable
-			// despite being visibly disabled.
-			if (child0.attrs.disabled = Boolean(child0.attrs.disabled)) {
-				child0.attrs.href = null
-				child0.attrs["aria-disabled"] = "true"
-				// If you *really* do want add `onclick` on a disabled link, use
-				// an `oncreate` hook to add it.
-			} else {
-				options = vnode7.attrs.options
-				onclick = vnode7.attrs.onclick
-				// Easier to build it now to keep it isomorphic.
-				href = buildPathname(child0.attrs.href, vnode7.attrs.params)
-				child0.attrs.href = route.prefix + href
-				child0.attrs.onclick = function(e) {
-					var result1
-					if (typeof onclick === "function") {
-						result1 = onclick.call(e.currentTarget, e)
-					} else if (onclick == null || typeof onclick !== "object") {
-						// do nothing
-					} else if (typeof onclick.handleEvent === "function") {
-						onclick.handleEvent(e)
-					}
-					// Adapted from React Router's implementation:
-					// https://github.com/ReactTraining/react-router/blob/520a0acd48ae1b066eb0b07d6d4d1790a1d02482/packages/react-router-dom/modules/Link.js
-					//
-					// Try to be flexible and intuitive in how we handle links.
-					// Fun fact: links aren't as obvious to get right as you
-					// would expect. There's a lot more valid ways to click a
-					// link than this, and one might want to not simply click a
-					// link, but right click or command-click it to copy the
-					// link target, etc. Nope, this isn't just for blind people.
-					if (
-						// Skip if `onclick` prevented default
-						result1 !== false && !e.defaultPrevented &&
-						// Ignore everything but left clicks
-						(e.button === 0 || e.which === 0 || e.which === 1) &&
-						// Let the browser handle `target=_blank`, etc.
-						(!e.currentTarget.target || e.currentTarget.target === "_self") &&
-						// No modifier keys
-						!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey
-					) {
-						e.preventDefault()
-						e.redraw = false
-						route.set(href, null, options)
-					}
-				}
-			}
-			return child0
-		},
-	}
-	route.param = function(key3) {
-		return attrs6 && key3 != null ? attrs6[key3] : attrs6
-	}
-	return route
-}
-var router = _33(typeof window !== "undefined" ? window : null, mountRedraw)
-var m = function m() { return hyperscript.apply(this, arguments) }
-m.m = hyperscript
-m.trust = hyperscript.trust
-m.fragment = hyperscript.fragment
-m.dom = hyperscript.dom
-m.Fragment = "["
-m.mount = mountRedraw.mount
-//m.route = router
-m.render = render
-m.redraw = mountRedraw.redraw
-//m.request = request.request
-//m.parseQueryString = parseQueryString
-//m.buildQueryString = buildQueryString
-//m.parsePathname = parsePathname
-//m.buildPathname = buildPathname
-m.vnode = Vnode
-m.censor = censor
 m.domFor = domFor
 if (typeof module !== "undefined") module["exports"] = m
 else window.m = m
-}());
+export default m;

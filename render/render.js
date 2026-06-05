@@ -111,15 +111,43 @@ module.exports = function() {
 		vnode.domSize = fragment.childNodes.length
 		insertDOM(parent, fragment, nextSibling)
 	}
+	/**
+	 * This DOM API is intended to work with Longform fragments
+	 * which have semantics of "unique" fragments. A unique fragment
+	 * should only appear once in a document, so we can use the
+	 * moveBefore API on them. The unique value is passed through
+	 * using a persist flag on the vnode.
+	 *
+	 * Other fragment types
+	 */
+
+	var supportsMoveBefore = "moveBefore" in document;
 	function createDOM(parent, vnode, ns, nextSibling) {
-		var fragment = getDocument(parent).createDocumentFragment()
-		if (vnode.els != null) {
-			for (var i = 0; i < vnode.els.length; i++) {
-				fragment.appendChild(vnode.els[i].cloneNode(true))
-			}
-		}
-		vnode.dom = fragment.firstChild
+		var node;
+		var last = nextSibling;
+		var document = getDocument(parent);
+		var commonAncestor = document.contains(parent) && document.contains(vnode.els[0]);
+
+		vnode.dom = vnode.els[0];
 		vnode.domSize = vnode.els.length
+
+		if (vnode.persist && commonAncestor && supportsMoveBefore) {
+			for (var i = vnode.els.length - 1; i > -1; i--) {
+				node = vnode.els[i];
+
+				parent.moveBefore(node, last);
+
+				last = node;
+			}
+
+			return;
+		}
+
+		var fragment = getDocument(parent).createDocumentFragment()
+		for (var i = 0; i < vnode.els.length; i++) {
+			fragment.appendChild(vnode.els[i]);
+		}
+
 		insertDOM(parent, fragment, nextSibling)
 	}
 	function createElement(parent, vnode, hooks, ns, nextSibling) {
@@ -578,7 +606,9 @@ module.exports = function() {
 	}
 
 	function insertDOM(parent, dom, nextSibling) {
-		if (nextSibling != null) parent.insertBefore(dom, nextSibling)
+		if (nextSibling != null) {
+			parent.insertBefore(dom, nextSibling);
+		}
 		else parent.appendChild(dom)
 	}
 
@@ -631,6 +661,8 @@ module.exports = function() {
 	}
 	function removeDOM(parent, vnode) {
 		if (vnode.dom == null) return
+		// if parent does not contains moveBefore likely has run on the child
+		if (vnode.persist && !parent.contains(vnode.dom)) return;
 		if (vnode.domSize == null || vnode.domSize === 1) {
 			parent.removeChild(vnode.dom)
 		} else {
