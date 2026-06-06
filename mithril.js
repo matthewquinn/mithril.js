@@ -175,7 +175,7 @@ function *domFor(vnode5) {
 		}
 		dom = nextSibling
 	}
-	while (domSize0)
+	while (domSize0 && dom != null)
 }
 var _16 = function() {
 	var nameSpace = {
@@ -297,6 +297,9 @@ var _16 = function() {
 		if (vnode4.persist && commonAncestor && supportsMoveBefore) {
 			for (var i = vnode4.els.length - 1; i > -1; i--) {
 				node = vnode4.els[i];
+				console.log('MOVING');
+				console.log('PARENT', parent);
+				console.log('NODE', node);
 				parent.moveBefore(node, last);
 				last = node;
 			}
