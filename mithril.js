@@ -175,6 +175,8 @@ function *domFor(vnode5) {
 		}
 		dom = nextSibling
 	}
+	// Not sure how well the rest of Mithril will handle this change
+	// while (domSize)
 	while (domSize0 && dom != null)
 }
 var _16 = function() {
@@ -297,9 +299,6 @@ var _16 = function() {
 		if (vnode4.persist && commonAncestor && supportsMoveBefore) {
 			for (var i = vnode4.els.length - 1; i > -1; i--) {
 				node = vnode4.els[i];
-				console.log('MOVING');
-				console.log('PARENT', parent);
-				console.log('NODE', node);
 				parent.moveBefore(node, last);
 				last = node;
 			}
@@ -752,7 +751,13 @@ var _16 = function() {
 	}
 	function insertDOM(parent, dom, nextSibling) {
 		if (nextSibling != null) {
-			parent.insertBefore(dom, nextSibling);
+			try {
+				parent.insertBefore(dom, nextSibling);
+			} catch (err) {
+				// HACK This is a hack to ignore the next sibling having been removed
+				// via other changes
+				parent.appendChild(dom);
+			}
 		}
 		else parent.appendChild(dom)
 	}
@@ -805,7 +810,9 @@ var _16 = function() {
 		// if parent does not contains moveBefore likely has run on the child
 		if (vnode4.persist && !parent.contains(vnode4.dom)) return;
 		if (vnode4.domSize == null || vnode4.domSize === 1) {
-			parent.removeChild(vnode4.dom)
+			try {
+			  parent.removeChild(vnode4.dom)
+			} catch {}
 		} else {
 			for (var dom of domFor(vnode4)) parent.removeChild(dom)
 		}

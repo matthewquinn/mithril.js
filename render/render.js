@@ -607,7 +607,13 @@ module.exports = function() {
 
 	function insertDOM(parent, dom, nextSibling) {
 		if (nextSibling != null) {
-			parent.insertBefore(dom, nextSibling);
+			try {
+				parent.insertBefore(dom, nextSibling);
+			} catch (err) {
+				// HACK This is a hack to ignore the next sibling having been removed
+				// via other changes
+				parent.appendChild(dom);
+			}
 		}
 		else parent.appendChild(dom)
 	}
@@ -664,7 +670,9 @@ module.exports = function() {
 		// if parent does not contains moveBefore likely has run on the child
 		if (vnode.persist && !parent.contains(vnode.dom)) return;
 		if (vnode.domSize == null || vnode.domSize === 1) {
-			parent.removeChild(vnode.dom)
+			try {
+			  parent.removeChild(vnode.dom)
+			} catch {}
 		} else {
 			for (var dom of domFor(vnode)) parent.removeChild(dom)
 		}
