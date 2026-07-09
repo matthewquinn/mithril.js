@@ -111,6 +111,7 @@ module.exports = function() {
 		vnode.domSize = fragment.childNodes.length
 		insertDOM(parent, fragment, nextSibling)
 	}
+
 	/**
 	 * This DOM API is intended to work with Longform fragments
 	 * which have semantics of "unique" fragments. A unique fragment
@@ -120,27 +121,53 @@ module.exports = function() {
 	 *
 	 * Other fragment types
 	 */
-
 	var supportsMoveBefore = "moveBefore" in document;
+	const uniqueDOM = new Map();
 	function createDOM(parent, vnode, ns, nextSibling) {
 		var node;
 		var last = nextSibling;
-		var document = getDocument(parent);
-		var commonAncestor = document.contains(parent) && document.contains(vnode.els[0]);
 
 		vnode.dom = vnode.els[0];
 		vnode.domSize = vnode.els.length
 
-		if (vnode.persist && commonAncestor && supportsMoveBefore) {
-			for (var i = vnode.els.length - 1; i > -1; i--) {
-				node = vnode.els[i];
+		if (vnode.gkey != null && supportsMoveBefore) {
+			let ref = uniqueDOM.get(vnode.gkey);
 
-				parent.moveBefore(node, last);
+			if (ref == null) {
+				ref = {
+					used: true,
+			  		els: vnode.els,
+				};
+				uniqueDOM.set(vnode.gkey, ref);
+			} else if (ref.used) {
+			    vnode.els = ref.els;
+			    vnode.dom = ref.els[0];
+			    vnode.domSize = ref.els.length;
+				return;
 
-				last = node;
+			} else {
+				ref.used = true;
+				// Sync the incoming vnode to use the persistent, cached elements
+			    // from previous frames instead of whatever new elements were passed.
+			    vnode.els = ref.els;
+			    vnode.dom = ref.els[0];
+			    vnode.domSize = ref.els.length;
 			}
 
-			return;
+		    var document = getDocument(parent);
+			var commonAncestor = vnode.dom.isConnected && document.contains(parent) && document.contains(vnode.dom);
+
+			if (commonAncestor) {
+			  for (var i = vnode.els.length - 1; i > -1; i--) {
+			  	node = vnode.els[i];
+
+			  	parent.moveBefore(node, last);
+
+			  	last = node;
+			  }
+
+			  return;
+			}
 		}
 
 		var fragment = getDocument(parent).createDocumentFragment()
@@ -667,8 +694,21 @@ module.exports = function() {
 	}
 	function removeDOM(parent, vnode) {
 		if (vnode.dom == null) return
-		// if parent does not contains moveBefore likely has run on the child
-		if (vnode.persist && !parent.contains(vnode.dom)) return;
+		if (vnode.gkey != null && vnode.dom.isConnected) {
+			var document = getDocument(vnode.dom)
+
+			for (let i = 0; i < vnode.els.length; i++) {
+			  document.documentElement.moveBefore(vnode.els[i], null);
+			}
+
+			var ref = uniqueDOM.get(vnode.gkey);
+
+			if (ref != null) {
+				ref.used = false;
+			}
+
+			return;
+		}
 		if (vnode.domSize == null || vnode.domSize === 1) {
 			try {
 			  parent.removeChild(vnode.dom)
@@ -967,6 +1007,18 @@ module.exports = function() {
 		} finally {
 			currentRedraw = prevRedraw
 			currentDOM = prevDOM
+
+			// cleanup unused global DOM.
+			for (const [key, value] of uniqueDOM.entries()) {
+				if (!value.used) {
+					for (let i = 0; i < value.els.length; i++) {
+						value.els[i].remove();
+					}
+					uniqueDOM.delete(key);
+				} else {
+					value.used = false;
+				}
+			}
 		}
 	}
 }

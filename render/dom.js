@@ -8,11 +8,11 @@ module.exports = function(fragment) {
 	var children = []
 	for (var i = 0; i < fragment.dom.length; i++)
 		children.push(
-			Vnode(fragment.dom[i].tagName, i, undefined, undefined, undefined, undefined)
+			Vnode(fragment.dom[i].tagName.toLowerCase(), i, undefined, undefined, undefined, undefined)
 		)
 	var vnode = Vnode("!", undefined, undefined, children, undefined, undefined)
 	vnode.els = fragment.dom;
-	vnode.persist = fragment.persist;
+	vnode.gkey = fragment.gkey;
 
 	return vnode
 }

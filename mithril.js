@@ -59,7 +59,7 @@ var emptyAttrs = {}
 // Since the attrs used as keys in this map are not released from the selectorCache object,
 // there is no risk of memory leaks. Therefore, Map is used here instead of WeakMap.
 var cachedAttrsIsStaticMap = new Map([[emptyAttrs, true]])
-var selectorParser = /(?:(^|#|\.)([^#\.\[\]]+))|(\[(.+?)(?:\s*=\s*("|'|)((?:\\["'\]]|.)*?)\5)?\])/g
+var selectorparser = /(?:(^|#|\.)([^#\.\[\]]+))|(\[(.+?)(?:\s*=\s*("|'|)((?:\\["'\]]|.)*?)\5)?\])/g
 var selectorCache = Object.create(null)
 function isEmpty(object) {
 	for (var key in object) if (hasOwn.call(object, key)) return false
