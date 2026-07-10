@@ -1,6 +1,6 @@
 "use strict"
-function Vnode(tag, key, attrs0, children, text, dom) {
-	return {tag: tag, key: key, attrs: attrs0, children: children, text: text, dom: dom, is: undefined, domSize: undefined, state: undefined, events: undefined, instance: undefined, persist: undefined}
+function Vnode(tag, key, attrs0, children, text, dom, gkey) {
+	return {tag: tag, key: key, attrs: attrs0, children: children, text: text, dom: dom, is: undefined, domSize: undefined, state: undefined, events: undefined, instance: undefined, gkey: undefined }
 }
 Vnode.normalize = function(node) {
 	if (Array.isArray(node)) return Vnode("[", undefined, undefined, Vnode.normalizeChildren(node), undefined, undefined)
@@ -59,7 +59,7 @@ var emptyAttrs = {}
 // Since the attrs used as keys in this map are not released from the selectorCache object,
 // there is no risk of memory leaks. Therefore, Map is used here instead of WeakMap.
 var cachedAttrsIsStaticMap = new Map([[emptyAttrs, true]])
-var selectorparser = /(?:(^|#|\.)([^#\.\[\]]+))|(\[(.+?)(?:\s*=\s*("|'|)((?:\\["'\]]|.)*?)\5)?\])/g
+var selectorParser = /(?:(^|#|\.)([^#\.\[\]]+))|(\[(.+?)(?:\s*=\s*("|'|)((?:\\["'\]]|.)*?)\5)?\])/g
 var selectorCache = Object.create(null)
 function isEmpty(object) {
 	for (var key in object) if (hasOwn.call(object, key)) return false
@@ -152,11 +152,11 @@ hyperscript.dom = function(fragment) {
 	var children2 = []
 	for (var i = 0; i < fragment.dom.length; i++)
 		children2.push(
-			Vnode(fragment.dom[i].tagName, i, undefined, undefined, undefined, undefined)
+			Vnode(fragment.dom[i].tagName.toLowerCase(), i, undefined, undefined, undefined, undefined)
 		)
 	var vnode3 = Vnode("!", undefined, undefined, children2, undefined, undefined)
 	vnode3.els = fragment.dom;
-	vnode3.persist = fragment.persist;
+	vnode3.gkey = fragment.gkey;
 	return vnode3
 }
 ;
@@ -289,20 +289,43 @@ var _16 = function() {
 	 * Other fragment types
 	 */
 	var supportsMoveBefore = "moveBefore" in document;
+	const uniqueDOM = new Map();
 	function createDOM(parent, vnode4, ns, nextSibling) {
 		var node;
 		var last = nextSibling;
-		var document = getDocument(parent);
-		var commonAncestor = document.contains(parent) && document.contains(vnode4.els[0]);
 		vnode4.dom = vnode4.els[0];
 		vnode4.domSize = vnode4.els.length
-		if (vnode4.persist && commonAncestor && supportsMoveBefore) {
-			for (var i = vnode4.els.length - 1; i > -1; i--) {
-				node = vnode4.els[i];
-				parent.moveBefore(node, last);
-				last = node;
+		if (vnode4.gkey != null && supportsMoveBefore) {
+			let ref = uniqueDOM.get(vnode4.gkey);
+			if (ref == null) {
+				ref = {
+					used: true,
+			  		els: vnode4.els,
+				};
+				uniqueDOM.set(vnode4.gkey, ref);
+			} else if (ref.used) {
+			    vnode4.els = ref.els;
+			    vnode4.dom = ref.els[0];
+			    vnode4.domSize = ref.els.length;
+				return;
+			} else {
+				ref.used = true;
+				// Sync the incoming vnode to use the persistent, cached elements
+			    // from previous frames instead of whatever new elements were passed.
+			    vnode4.els = ref.els;
+			    vnode4.dom = ref.els[0];
+			    vnode4.domSize = ref.els.length;
 			}
-			return;
+		    var document = getDocument(parent);
+			var commonAncestor = vnode4.dom.isConnected && document.contains(parent) && document.contains(vnode4.dom);
+			if (commonAncestor) {
+			  for (var i = vnode4.els.length - 1; i > -1; i--) {
+			  	node = vnode4.els[i];
+			  	parent.moveBefore(node, last);
+			  	last = node;
+			  }
+			  return;
+			}
 		}
 		var fragment = getDocument(parent).createDocumentFragment()
 		for (var i = 0; i < vnode4.els.length; i++) {
@@ -807,8 +830,17 @@ var _16 = function() {
 	}
 	function removeDOM(parent, vnode4) {
 		if (vnode4.dom == null) return
-		// if parent does not contains moveBefore likely has run on the child
-		if (vnode4.persist && !parent.contains(vnode4.dom)) return;
+		if (vnode4.gkey != null && vnode4.dom.isConnected) {
+			var document = getDocument(vnode4.dom)
+			for (let i = 0; i < vnode4.els.length; i++) {
+			  document.documentElement.moveBefore(vnode4.els[i], null);
+			}
+			var ref = uniqueDOM.get(vnode4.gkey);
+			if (ref != null) {
+				ref.used = false;
+			}
+			return;
+		}
 		if (vnode4.domSize == null || vnode4.domSize === 1) {
 			try {
 			  parent.removeChild(vnode4.dom)
@@ -1098,6 +1130,17 @@ var _16 = function() {
 		} finally {
 			currentRedraw = prevRedraw
 			currentDOM = prevDOM
+			// cleanup unused global DOM.
+			for (const [key, value] of uniqueDOM.entries()) {
+				if (!value.used) {
+					for (let i = 0; i < value.els.length; i++) {
+						value.els[i].remove();
+					}
+					uniqueDOM.delete(key);
+				} else {
+					value.used = false;
+				}
+			}
 		}
 	}
 }
