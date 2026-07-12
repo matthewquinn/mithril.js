@@ -122,7 +122,7 @@ module.exports = function() {
 	 * Other fragment types
 	 */
 	var supportsMoveBefore = "moveBefore" in document;
-	const uniqueDOM = new Map();
+	var uniqueDOM;
 	function createDOM(parent, vnode, ns, nextSibling) {
 		var node;
 		var last = nextSibling;
@@ -135,6 +135,7 @@ module.exports = function() {
 
 			if (ref == null) {
 				ref = {
+					created: true,
 					used: true,
 			  		els: vnode.els,
 				};
@@ -144,7 +145,6 @@ module.exports = function() {
 			    vnode.dom = ref.els[0];
 			    vnode.domSize = ref.els.length;
 				return;
-
 			} else {
 				ref.used = true;
 				// Sync the incoming vnode to use the persistent, cached elements
@@ -161,7 +161,7 @@ module.exports = function() {
 			  for (var i = vnode.els.length - 1; i > -1; i--) {
 			  	node = vnode.els[i];
 
-			  	parent.moveBefore(node, last);
+			  	parent.moveBefore(node, last ?? null);
 
 			  	last = node;
 			  }
@@ -697,11 +697,12 @@ module.exports = function() {
 		if (vnode.gkey != null && vnode.dom.isConnected) {
 			var document = getDocument(vnode.dom)
 
+			var ref = uniqueDOM.get(vnode.gkey);
+			if (ref?.used) return;
+
 			for (let i = 0; i < vnode.els.length; i++) {
 			  document.documentElement.moveBefore(vnode.els[i], null);
 			}
-
-			var ref = uniqueDOM.get(vnode.gkey);
 
 			if (ref != null) {
 				ref.used = false;
@@ -981,7 +982,7 @@ module.exports = function() {
 
 	var currentDOM
 
-	return function(dom, vnodes, redraw) {
+	return function(dom, vnodes, redraw, udom) {
 		if (!dom) throw new TypeError("DOM element being rendered to does not exist.")
 		if (currentDOM != null && dom.contains(currentDOM)) {
 			throw new TypeError("Node is currently being rendered to and thus is locked.")
@@ -993,6 +994,7 @@ module.exports = function() {
 		var namespace = dom.namespaceURI
 
 		currentDOM = dom
+		uniqueDOM = udom;
 		currentRedraw = typeof redraw === "function" ? redraw : undefined
 		currentRender = {}
 		try {
@@ -1007,18 +1009,6 @@ module.exports = function() {
 		} finally {
 			currentRedraw = prevRedraw
 			currentDOM = prevDOM
-
-			// cleanup unused global DOM.
-			for (const [key, value] of uniqueDOM.entries()) {
-				if (!value.used) {
-					for (let i = 0; i < value.els.length; i++) {
-						value.els[i].remove();
-					}
-					uniqueDOM.delete(key);
-				} else {
-					value.used = false;
-				}
-			}
 		}
 	}
 }

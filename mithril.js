@@ -289,7 +289,7 @@ var _16 = function() {
 	 * Other fragment types
 	 */
 	var supportsMoveBefore = "moveBefore" in document;
-	const uniqueDOM = new Map();
+	var uniqueDOM;
 	function createDOM(parent, vnode4, ns, nextSibling) {
 		var node;
 		var last = nextSibling;
@@ -299,6 +299,7 @@ var _16 = function() {
 			let ref = uniqueDOM.get(vnode4.gkey);
 			if (ref == null) {
 				ref = {
+					created: true,
 					used: true,
 			  		els: vnode4.els,
 				};
@@ -321,7 +322,7 @@ var _16 = function() {
 			if (commonAncestor) {
 			  for (var i = vnode4.els.length - 1; i > -1; i--) {
 			  	node = vnode4.els[i];
-			  	parent.moveBefore(node, last);
+			  	parent.moveBefore(node, last ?? null);
 			  	last = node;
 			  }
 			  return;
@@ -832,10 +833,11 @@ var _16 = function() {
 		if (vnode4.dom == null) return
 		if (vnode4.gkey != null && vnode4.dom.isConnected) {
 			var document = getDocument(vnode4.dom)
+			var ref = uniqueDOM.get(vnode4.gkey);
+			if (ref?.used) return;
 			for (let i = 0; i < vnode4.els.length; i++) {
 			  document.documentElement.moveBefore(vnode4.els[i], null);
 			}
-			var ref = uniqueDOM.get(vnode4.gkey);
 			if (ref != null) {
 				ref.used = false;
 			}
@@ -1105,7 +1107,7 @@ var _16 = function() {
 		return true
 	}
 	var currentDOM
-	return function(dom, vnodes, redraw) {
+	return function(dom, vnodes, redraw, udom) {
 		if (!dom) throw new TypeError("DOM element being rendered to does not exist.")
 		if (currentDOM != null && dom.contains(currentDOM)) {
 			throw new TypeError("Node is currently being rendered to and thus is locked.")
@@ -1116,6 +1118,7 @@ var _16 = function() {
 		var active = activeElement(dom)
 		var namespace = dom.namespaceURI
 		currentDOM = dom
+		uniqueDOM = udom;
 		currentRedraw = typeof redraw === "function" ? redraw : undefined
 		currentRender = {}
 		try {
@@ -1130,17 +1133,6 @@ var _16 = function() {
 		} finally {
 			currentRedraw = prevRedraw
 			currentDOM = prevDOM
-			// cleanup unused global DOM.
-			for (const [key, value] of uniqueDOM.entries()) {
-				if (!value.used) {
-					for (let i = 0; i < value.els.length; i++) {
-						value.els[i].remove();
-					}
-					uniqueDOM.delete(key);
-				} else {
-					value.used = false;
-				}
-			}
 		}
 	}
 }
@@ -1149,12 +1141,24 @@ var _23 = function(render2, schedule, console) {
 	var subscriptions = []
 	var pending = false
 	var offset = -1
+	var uniqueDOM0 = new Map();
 	function sync() {
+		for (const [key0, value0] of uniqueDOM0.entries()) {
+			value0.used = false;
+		}
 		for (offset = 0; offset < subscriptions.length; offset += 2) {
-			try { render2(subscriptions[offset], Vnode(subscriptions[offset + 1]), redraw) }
+			try { render2(subscriptions[offset], Vnode(subscriptions[offset + 1]), redraw, uniqueDOM0) }
 			catch (e) { console.error(e) }
 		}
 		offset = -1
+		for (const [key0, value0] of uniqueDOM0.entries()) {
+			if (!value0.used) {
+				for (let i = 0; i < value0.els.length; i++) {
+					value0.els[i].remove();
+				}
+			}
+			uniqueDOM0.delete(key0);
+		}
 	}
 	function redraw() {
 		if (!pending) {
@@ -1178,7 +1182,7 @@ var _23 = function(render2, schedule, console) {
 		}
 		if (component != null) {
 			subscriptions.push(root, component)
-			render2(root, Vnode(component), redraw)
+			render2(root, Vnode(component), redraw, uniqueDOM0)
 		}
 	}
 	return {mount: mount, redraw: redraw}
@@ -1220,15 +1224,15 @@ var magic = /^(?:key|oninit|oncreate|onbeforeupdate|onupdate|onbeforeremove|onre
 m.censor = function(attrs6, extras) {
 	var result0 = {}
 	if (extras != null) {
-		for (var key0 in attrs6) {
-			if (hasOwn.call(attrs6, key0) && !magic.test(key0) && extras.indexOf(key0) < 0) {
-				result0[key0] = attrs6[key0]
+		for (var key1 in attrs6) {
+			if (hasOwn.call(attrs6, key1) && !magic.test(key1) && extras.indexOf(key1) < 0) {
+				result0[key1] = attrs6[key1]
 			}
 		}
 	} else {
-		for (var key0 in attrs6) {
-			if (hasOwn.call(attrs6, key0) && !magic.test(key0)) {
-				result0[key0] = attrs6[key0]
+		for (var key1 in attrs6) {
+			if (hasOwn.call(attrs6, key1) && !magic.test(key1)) {
+				result0[key1] = attrs6[key1]
 			}
 		}
 	}
