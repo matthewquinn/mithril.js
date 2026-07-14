@@ -124,6 +124,7 @@ module.exports = function() {
 	var supportsMoveBefore = "moveBefore" in document;
 	var uniqueDOM;
 	function createDOM(parent, vnode, ns, nextSibling) {
+		var ref;
 		var node;
 		var last = nextSibling;
 
@@ -131,7 +132,7 @@ module.exports = function() {
 		vnode.domSize = vnode.els.length
 
 		if (vnode.gkey != null && supportsMoveBefore) {
-			let ref = uniqueDOM.get(vnode.gkey);
+			ref = uniqueDOM.get(vnode.gkey);
 
 			if (ref == null) {
 				ref = {
@@ -167,6 +168,8 @@ module.exports = function() {
 			  }
 
 			  return;
+			} else if (vnode.state != null && typeof vnode.state.ondomcreate === 'function') {
+				ref.ondomremove = vnode.state.ondomcreate(vnode.els);
 			}
 		}
 
@@ -176,6 +179,11 @@ module.exports = function() {
 		}
 
 		insertDOM(parent, fragment, nextSibling)
+
+		// TODO: This should probably be scheduled in the hooks array.
+		if (ref == null && vnode.state != null && typeof vnode.state.ondomcreate === 'function') {
+			vnode.state.ondomremove = vnode.state.ondomcreate(vnode.els);
+		}
 	}
 	function createElement(parent, vnode, hooks, ns, nextSibling) {
 		var tag = vnode.tag
@@ -717,6 +725,9 @@ module.exports = function() {
 		} else {
 			for (var dom of domFor(vnode)) parent.removeChild(dom)
 		}
+		// TODO: move to hooks array.
+		if (vnode.tag === "!" && vnode.state != null && vnode.state.ondomremove != null)
+			vnode.state.ondomremove(vnode.els)
 	}
 
 	function onremove(vnode) {

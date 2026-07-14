@@ -150,13 +150,21 @@ hyperscript.dom = function(fragment) {
 	if (fragment == null)
 		return Vnode("<", undefined, undefined, "", undefined, undefined)
 	var children2 = []
-	for (var i = 0; i < fragment.dom.length; i++)
+	// create enough VDOM so the diffing algo expects space to be filled
+	for (var i = 0; i < fragment.dom.length; i++) {
 		children2.push(
 			Vnode(fragment.dom[i].tagName.toLowerCase(), i, undefined, undefined, undefined, undefined)
 		)
+	}
 	var vnode3 = Vnode("!", undefined, undefined, children2, undefined, undefined)
 	vnode3.els = fragment.dom;
 	vnode3.gkey = fragment.gkey;
+	if (typeof fragment.oncreate === "function") {
+		vnode3.state = {
+			ondomcreate: fragment.oncreate,
+			ondomremove: undefined,
+		};
+	}
 	return vnode3
 }
 ;
@@ -291,12 +299,13 @@ var _16 = function() {
 	var supportsMoveBefore = "moveBefore" in document;
 	var uniqueDOM;
 	function createDOM(parent, vnode4, ns, nextSibling) {
+		var ref;
 		var node;
 		var last = nextSibling;
 		vnode4.dom = vnode4.els[0];
 		vnode4.domSize = vnode4.els.length
 		if (vnode4.gkey != null && supportsMoveBefore) {
-			let ref = uniqueDOM.get(vnode4.gkey);
+			ref = uniqueDOM.get(vnode4.gkey);
 			if (ref == null) {
 				ref = {
 					created: true,
@@ -326,6 +335,8 @@ var _16 = function() {
 			  	last = node;
 			  }
 			  return;
+			} else if (vnode4.state != null && typeof vnode4.state.ondomcreate === 'function') {
+				ref.ondomremove = vnode4.state.ondomcreate(vnode4.els);
 			}
 		}
 		var fragment = getDocument(parent).createDocumentFragment()
@@ -333,6 +344,10 @@ var _16 = function() {
 			fragment.appendChild(vnode4.els[i]);
 		}
 		insertDOM(parent, fragment, nextSibling)
+		// TODO: This should probably be scheduled in the hooks array.
+		if (ref == null && vnode4.state != null && typeof vnode4.state.ondomcreate === 'function') {
+			vnode4.state.ondomremove = vnode4.state.ondomcreate(vnode4.els);
+		}
 	}
 	function createElement(parent, vnode4, hooks, ns, nextSibling) {
 		var tag = vnode4.tag
@@ -850,6 +865,9 @@ var _16 = function() {
 		} else {
 			for (var dom of domFor(vnode4)) parent.removeChild(dom)
 		}
+		// TODO: move to hooks array.
+		if (vnode4.tag === "!" && vnode4.state != null && vnode4.state.ondomremove != null)
+			vnode4.state.ondomremove(vnode4.els)
 	}
 	function onremove(vnode4) {
 		if (typeof vnode4.tag !== "string" && typeof vnode4.state.onremove === "function") callHook.call(vnode4.state.onremove, vnode4)
@@ -1153,6 +1171,8 @@ var _23 = function(render2, schedule, console) {
 		offset = -1
 		for (const [key0, value0] of uniqueDOM0.entries()) {
 			if (!value0.used) {
+				if (typeof value0.ondomremove === 'function')
+					value0.ondomremove(value0.els);
 				for (let i = 0; i < value0.els.length; i++) {
 					value0.els[i].remove();
 				}
