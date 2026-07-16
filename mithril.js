@@ -160,7 +160,7 @@ hyperscript.dom = function(fragment) {
 	vnode3.els = fragment.dom;
 	vnode3.gkey = fragment.gkey;
 	if (typeof fragment.oncreate === "function") {
-		vnode3.state = {
+		vnode3.attrs = {
 			ondomcreate: fragment.oncreate,
 			ondomremove: undefined,
 		};
@@ -335,8 +335,8 @@ var _16 = function() {
 			  	last = node;
 			  }
 			  return;
-			} else if (vnode4.state != null && typeof vnode4.state.ondomcreate === 'function') {
-				ref.ondomremove = vnode4.state.ondomcreate(vnode4.els);
+			} else if (vnode4.attrs != null && typeof vnode4.attrs.ondomcreate === 'function') {
+				ref.ondomremove = vnode4.attrs.ondomcreate(vnode4.els);
 			}
 		}
 		var fragment = getDocument(parent).createDocumentFragment()
@@ -345,28 +345,28 @@ var _16 = function() {
 		}
 		insertDOM(parent, fragment, nextSibling)
 		// TODO: This should probably be scheduled in the hooks array.
-		if (ref == null && vnode4.state != null && typeof vnode4.state.ondomcreate === 'function') {
-			vnode4.state.ondomremove = vnode4.state.ondomcreate(vnode4.els);
+		if (ref == null && vnode4.attrs != null && typeof vnode4.attrs.ondomcreate === 'function') {
+			vnode4.attrs.ondomremove = vnode4.attrs.ondomcreate(vnode4.els);
 		}
 	}
 	function createElement(parent, vnode4, hooks, ns, nextSibling) {
 		var tag = vnode4.tag
-		var attrs5 = vnode4.attrs
+		var attrs6 = vnode4.attrs
 		var is = vnode4.is
 		ns = getNameSpace(vnode4) || ns
 		var element = ns ?
 			is ? getDocument(parent).createElementNS(ns, tag, {is: is}) : getDocument(parent).createElementNS(ns, tag) :
 			is ? getDocument(parent).createElement(tag, {is: is}) : getDocument(parent).createElement(tag)
 		vnode4.dom = element
-		if (attrs5 != null) {
-			setAttrs(vnode4, attrs5, ns)
+		if (attrs6 != null) {
+			setAttrs(vnode4, attrs6, ns)
 		}
 		insertDOM(parent, element, nextSibling)
 		if (!maybeSetContentEditable(vnode4)) {
 			if (vnode4.children != null) {
 				var children3 = vnode4.children
 				createNodes(element, children3, 0, children3.length, hooks, null, ns)
-				if (vnode4.tag === "select" && attrs5 != null) setLateSelectAttrs(vnode4, attrs5)
+				if (vnode4.tag === "select" && attrs6 != null) setLateSelectAttrs(vnode4, attrs6)
 			}
 		}
 	}
@@ -676,13 +676,22 @@ var _16 = function() {
 		vnode4.domSize = domSize
 	}
 	function updateDOM(parent, old, vnode4, nextSibling, ns) {
-		if (old.els !== vnode4.els) {
+		if (old.els !== vnode4.els || (
+			(old.gkey != null || vnode4.gkey != null) && old.gkey !== vnode4.gkey)) {
 			removeDOM(parent, old)
 			createDOM(parent, vnode4, ns, nextSibling)
 		}
 		else {
 			vnode4.dom = old.dom
 			vnode4.domSize = old.domSize
+			if (vnode4.gkey != null) {
+				const ref = uniqueDOM.get(vnode4.gkey);
+				if (ref == null) {
+				  console.error('Undefined ref for element with global key', vnode4.gkey);
+				} else {
+				  ref.used = true;
+				}
+			}
 		}
 	}
 	function updateElement(old, vnode4, hooks, ns) {
@@ -866,8 +875,9 @@ var _16 = function() {
 			for (var dom of domFor(vnode4)) parent.removeChild(dom)
 		}
 		// TODO: move to hooks array.
-		if (vnode4.tag === "!" && vnode4.state != null && vnode4.state.ondomremove != null)
-			vnode4.state.ondomremove(vnode4.els)
+		if (vnode4.tag === "!" && vnode4.attrs != null && vnode4.attrs.ondomremove != null) {
+			vnode4.attrs.ondomremove(vnode4.els)
+		}
 	}
 	function onremove(vnode4) {
 		if (typeof vnode4.tag !== "string" && typeof vnode4.state.onremove === "function") callHook.call(vnode4.state.onremove, vnode4)
@@ -886,9 +896,9 @@ var _16 = function() {
 		}
 	}
 	//attrs
-	function setAttrs(vnode4, attrs5, ns) {
-		for (var key in attrs5) {
-			setAttr(vnode4, key, null, attrs5[key], ns)
+	function setAttrs(vnode4, attrs6, ns) {
+		for (var key in attrs6) {
+			setAttr(vnode4, key, null, attrs6[key], ns)
 		}
 	}
 	function setAttr(vnode4, key, old, value, ns) {
@@ -945,36 +955,36 @@ var _16 = function() {
 			if (old !== false) vnode4.dom.removeAttribute(key === "className" ? "class" : key)
 		}
 	}
-	function setLateSelectAttrs(vnode4, attrs5) {
-		if ("value" in attrs5) {
-			if(attrs5.value === null) {
+	function setLateSelectAttrs(vnode4, attrs6) {
+		if ("value" in attrs6) {
+			if(attrs6.value === null) {
 				if (vnode4.dom.selectedIndex !== -1) vnode4.dom.value = null
 			} else {
-				var normalized = "" + attrs5.value // eslint-disable-line no-implicit-coercion
+				var normalized = "" + attrs6.value // eslint-disable-line no-implicit-coercion
 				if (vnode4.dom.value !== normalized || vnode4.dom.selectedIndex === -1) {
 					vnode4.dom.value = normalized
 				}
 			}
 		}
-		if ("selectedIndex" in attrs5) setAttr(vnode4, "selectedIndex", null, attrs5.selectedIndex, undefined)
+		if ("selectedIndex" in attrs6) setAttr(vnode4, "selectedIndex", null, attrs6.selectedIndex, undefined)
 	}
-	function updateAttrs(vnode4, old, attrs5, ns) {
+	function updateAttrs(vnode4, old, attrs6, ns) {
 		// Some attributes may NOT be case-sensitive (e.g. data-***),
 		// so removal should be done first to prevent accidental removal for newly setting values.
 		var val
 		if (old != null) {
-			if (old === attrs5 && !cachedAttrsIsStaticMap.has(attrs5)) {
+			if (old === attrs6 && !cachedAttrsIsStaticMap.has(attrs6)) {
 				console.warn("Don't reuse attrs object, use new object for every redraw, this will throw in next major")
 			}
 			for (var key in old) {
-				if (((val = old[key]) != null) && (attrs5 == null || attrs5[key] == null)) {
+				if (((val = old[key]) != null) && (attrs6 == null || attrs6[key] == null)) {
 					removeAttr(vnode4, key, val, ns)
 				}
 			}
 		}
-		if (attrs5 != null) {
-			for (var key in attrs5) {
-				setAttr(vnode4, key, old && old[key], attrs5[key], ns)
+		if (attrs6 != null) {
+			for (var key in attrs6) {
+				setAttr(vnode4, key, old && old[key], attrs6[key], ns)
 			}
 		}
 	}
@@ -1171,13 +1181,14 @@ var _23 = function(render2, schedule, console) {
 		offset = -1
 		for (const [key0, value0] of uniqueDOM0.entries()) {
 			if (!value0.used) {
+				console.log('UNUSED', value0);
 				if (typeof value0.ondomremove === 'function')
 					value0.ondomremove(value0.els);
 				for (let i = 0; i < value0.els.length; i++) {
 					value0.els[i].remove();
 				}
+				uniqueDOM0.delete(key0);
 			}
-			uniqueDOM0.delete(key0);
 		}
 	}
 	function redraw() {
@@ -1241,18 +1252,18 @@ m.vnode = Vnode
 // }
 // ```
 var magic = /^(?:key|oninit|oncreate|onbeforeupdate|onupdate|onbeforeremove|onremove)$/
-m.censor = function(attrs6, extras) {
+m.censor = function(attrs7, extras) {
 	var result0 = {}
 	if (extras != null) {
-		for (var key1 in attrs6) {
-			if (hasOwn.call(attrs6, key1) && !magic.test(key1) && extras.indexOf(key1) < 0) {
-				result0[key1] = attrs6[key1]
+		for (var key1 in attrs7) {
+			if (hasOwn.call(attrs7, key1) && !magic.test(key1) && extras.indexOf(key1) < 0) {
+				result0[key1] = attrs7[key1]
 			}
 		}
 	} else {
-		for (var key1 in attrs6) {
-			if (hasOwn.call(attrs6, key1) && !magic.test(key1)) {
-				result0[key1] = attrs6[key1]
+		for (var key1 in attrs7) {
+			if (hasOwn.call(attrs7, key1) && !magic.test(key1)) {
+				result0[key1] = attrs7[key1]
 			}
 		}
 	}

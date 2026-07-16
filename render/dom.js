@@ -17,7 +17,7 @@ module.exports = function(fragment) {
 	vnode.gkey = fragment.gkey;
 
 	if (typeof fragment.oncreate === "function") {
-		vnode.state = {
+		vnode.attrs = {
 			ondomcreate: fragment.oncreate,
 			ondomremove: undefined,
 		};

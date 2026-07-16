@@ -168,8 +168,8 @@ module.exports = function() {
 			  }
 
 			  return;
-			} else if (vnode.state != null && typeof vnode.state.ondomcreate === 'function') {
-				ref.ondomremove = vnode.state.ondomcreate(vnode.els);
+			} else if (vnode.attrs != null && typeof vnode.attrs.ondomcreate === 'function') {
+				ref.ondomremove = vnode.attrs.ondomcreate(vnode.els);
 			}
 		}
 
@@ -181,8 +181,8 @@ module.exports = function() {
 		insertDOM(parent, fragment, nextSibling)
 
 		// TODO: This should probably be scheduled in the hooks array.
-		if (ref == null && vnode.state != null && typeof vnode.state.ondomcreate === 'function') {
-			vnode.state.ondomremove = vnode.state.ondomcreate(vnode.els);
+		if (ref == null && vnode.attrs != null && typeof vnode.attrs.ondomcreate === 'function') {
+			vnode.attrs.ondomremove = vnode.attrs.ondomcreate(vnode.els);
 		}
 	}
 	function createElement(parent, vnode, hooks, ns, nextSibling) {
@@ -524,13 +524,24 @@ module.exports = function() {
 		vnode.domSize = domSize
 	}
 	function updateDOM(parent, old, vnode, nextSibling, ns) {
-		if (old.els !== vnode.els) {
+		if (old.els !== vnode.els || (
+			(old.gkey != null || vnode.gkey != null) && old.gkey !== vnode.gkey)) {
 			removeDOM(parent, old)
 			createDOM(parent, vnode, ns, nextSibling)
 		}
 		else {
 			vnode.dom = old.dom
 			vnode.domSize = old.domSize
+
+			if (vnode.gkey != null) {
+				const ref = uniqueDOM.get(vnode.gkey);
+
+				if (ref == null) {
+				  console.error('Undefined ref for element with global key', vnode.gkey);
+				} else {
+				  ref.used = true;
+				}
+			}
 		}
 	}
 	function updateElement(old, vnode, hooks, ns) {
@@ -726,8 +737,9 @@ module.exports = function() {
 			for (var dom of domFor(vnode)) parent.removeChild(dom)
 		}
 		// TODO: move to hooks array.
-		if (vnode.tag === "!" && vnode.state != null && vnode.state.ondomremove != null)
-			vnode.state.ondomremove(vnode.els)
+		if (vnode.tag === "!" && vnode.attrs != null && vnode.attrs.ondomremove != null) {
+			vnode.attrs.ondomremove(vnode.els)
+		}
 	}
 
 	function onremove(vnode) {

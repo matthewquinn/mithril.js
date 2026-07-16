@@ -19,14 +19,15 @@ module.exports = function(render, schedule, console) {
 		offset = -1
 		for (const [key, value] of uniqueDOM.entries()) {
 			if (!value.used) {
+				console.log('UNUSED', value);
 				if (typeof value.ondomremove === 'function')
 					value.ondomremove(value.els);
 				for (let i = 0; i < value.els.length; i++) {
 					value.els[i].remove();
 				}
-			}
 
-			uniqueDOM.delete(key);
+				uniqueDOM.delete(key);
+			}
 		}
 	}
 
