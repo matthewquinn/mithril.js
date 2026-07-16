@@ -6,13 +6,29 @@ module.exports = function(render, schedule, console) {
 	var subscriptions = []
 	var pending = false
 	var offset = -1
+	var uniqueDOM = new Map();
 
 	function sync() {
+		for (const [key, value] of uniqueDOM.entries()) {
+			value.used = false;
+		}
 		for (offset = 0; offset < subscriptions.length; offset += 2) {
-			try { render(subscriptions[offset], Vnode(subscriptions[offset + 1]), redraw) }
+			try { render(subscriptions[offset], Vnode(subscriptions[offset + 1]), redraw, uniqueDOM) }
 			catch (e) { console.error(e) }
 		}
 		offset = -1
+		for (const [key, value] of uniqueDOM.entries()) {
+			if (!value.used) {
+				console.log('UNUSED', value);
+				if (typeof value.ondomremove === 'function')
+					value.ondomremove(value.els);
+				for (let i = 0; i < value.els.length; i++) {
+					value.els[i].remove();
+				}
+
+				uniqueDOM.delete(key);
+			}
+		}
 	}
 
 	function redraw() {
@@ -41,7 +57,7 @@ module.exports = function(render, schedule, console) {
 
 		if (component != null) {
 			subscriptions.push(root, component)
-			render(root, Vnode(component), redraw)
+			render(root, Vnode(component), redraw, uniqueDOM)
 		}
 	}
 

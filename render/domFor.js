@@ -18,7 +18,9 @@ function *domFor(vnode) {
 
 		dom = nextSibling
 	}
-	while (domSize)
+	// Not sure how well the rest of Mithril will handle this change
+	// while (domSize)
+	while (domSize && dom != null)
 }
 
 module.exports = domFor

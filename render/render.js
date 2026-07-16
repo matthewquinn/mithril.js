@@ -67,6 +67,7 @@ module.exports = function() {
 				case "#": createText(parent, vnode, nextSibling); break
 				case "<": createHTML(parent, vnode, ns, nextSibling); break
 				case "[": createFragment(parent, vnode, hooks, ns, nextSibling); break
+				case "!": createDOM(parent, vnode, ns, nextSibling); break
 				default: createElement(parent, vnode, hooks, ns, nextSibling)
 			}
 		}
@@ -109,6 +110,80 @@ module.exports = function() {
 		vnode.dom = fragment.firstChild
 		vnode.domSize = fragment.childNodes.length
 		insertDOM(parent, fragment, nextSibling)
+	}
+
+	/**
+	 * This DOM API is intended to work with Longform fragments
+	 * which have semantics of "unique" fragments. A unique fragment
+	 * should only appear once in a document, so we can use the
+	 * moveBefore API on them. The unique value is passed through
+	 * using a persist flag on the vnode.
+	 *
+	 * Other fragment types
+	 */
+	var supportsMoveBefore = "moveBefore" in document;
+	var uniqueDOM;
+	function createDOM(parent, vnode, ns, nextSibling) {
+		var ref;
+		var node;
+		var last = nextSibling;
+
+		vnode.dom = vnode.els[0];
+		vnode.domSize = vnode.els.length
+
+		if (vnode.gkey != null && supportsMoveBefore) {
+			ref = uniqueDOM.get(vnode.gkey);
+
+			if (ref == null) {
+				ref = {
+					created: true,
+					used: true,
+			  		els: vnode.els,
+				};
+				uniqueDOM.set(vnode.gkey, ref);
+			} else if (ref.used) {
+			    vnode.els = ref.els;
+			    vnode.dom = ref.els[0];
+			    vnode.domSize = ref.els.length;
+				return;
+			} else {
+				ref.used = true;
+				// Sync the incoming vnode to use the persistent, cached elements
+			    // from previous frames instead of whatever new elements were passed.
+			    vnode.els = ref.els;
+			    vnode.dom = ref.els[0];
+			    vnode.domSize = ref.els.length;
+			}
+
+		    var document = getDocument(parent);
+			var commonAncestor = vnode.dom.isConnected && document.contains(parent) && document.contains(vnode.dom);
+
+			if (commonAncestor) {
+			  for (var i = vnode.els.length - 1; i > -1; i--) {
+			  	node = vnode.els[i];
+
+			  	parent.moveBefore(node, last ?? null);
+
+			  	last = node;
+			  }
+
+			  return;
+			} else if (vnode.attrs != null && typeof vnode.attrs.ondomcreate === 'function') {
+				ref.ondomremove = vnode.attrs.ondomcreate(vnode.els);
+			}
+		}
+
+		var fragment = getDocument(parent).createDocumentFragment()
+		for (var i = 0; i < vnode.els.length; i++) {
+			fragment.appendChild(vnode.els[i]);
+		}
+
+		insertDOM(parent, fragment, nextSibling)
+
+		// TODO: This should probably be scheduled in the hooks array.
+		if (ref == null && vnode.attrs != null && typeof vnode.attrs.ondomcreate === 'function') {
+			vnode.attrs.ondomremove = vnode.attrs.ondomcreate(vnode.els);
+		}
 	}
 	function createElement(parent, vnode, hooks, ns, nextSibling) {
 		var tag = vnode.tag
@@ -183,7 +258,6 @@ module.exports = function() {
 	 */
 	// This function diffs and patches lists of vnodes, both keyed and unkeyed.
 	//
-	// We will:
 	//
 	// 1. describe its general structure
 	// 2. focus on the diff algorithm optimizations
@@ -407,6 +481,7 @@ module.exports = function() {
 					case "#": updateText(old, vnode); break
 					case "<": updateHTML(parent, old, vnode, ns, nextSibling); break
 					case "[": updateFragment(parent, old, vnode, hooks, nextSibling, ns); break
+					case "!": updateDOM(parent, old, vnode, nextSibling); break
 					default: updateElement(old, vnode, hooks, ns)
 				}
 			}
@@ -447,6 +522,27 @@ module.exports = function() {
 			}
 		}
 		vnode.domSize = domSize
+	}
+	function updateDOM(parent, old, vnode, nextSibling, ns) {
+		if (old.els !== vnode.els || (
+			(old.gkey != null || vnode.gkey != null) && old.gkey !== vnode.gkey)) {
+			removeDOM(parent, old)
+			createDOM(parent, vnode, ns, nextSibling)
+		}
+		else {
+			vnode.dom = old.dom
+			vnode.domSize = old.domSize
+
+			if (vnode.gkey != null) {
+				const ref = uniqueDOM.get(vnode.gkey);
+
+				if (ref == null) {
+				  console.error('Undefined ref for element with global key', vnode.gkey);
+				} else {
+				  ref.used = true;
+				}
+			}
+		}
 	}
 	function updateElement(old, vnode, hooks, ns) {
 		var element = vnode.dom = old.dom
@@ -556,7 +652,15 @@ module.exports = function() {
 	}
 
 	function insertDOM(parent, dom, nextSibling) {
-		if (nextSibling != null) parent.insertBefore(dom, nextSibling)
+		if (nextSibling != null) {
+			try {
+				parent.insertBefore(dom, nextSibling);
+			} catch (err) {
+				// HACK This is a hack to ignore the next sibling having been removed
+				// via other changes
+				parent.appendChild(dom);
+			}
+		}
 		else parent.appendChild(dom)
 	}
 
@@ -609,10 +713,32 @@ module.exports = function() {
 	}
 	function removeDOM(parent, vnode) {
 		if (vnode.dom == null) return
+		if (vnode.gkey != null && vnode.dom.isConnected) {
+			var document = getDocument(vnode.dom)
+
+			var ref = uniqueDOM.get(vnode.gkey);
+			if (ref?.used) return;
+
+			for (let i = 0; i < vnode.els.length; i++) {
+			  document.documentElement.moveBefore(vnode.els[i], null);
+			}
+
+			if (ref != null) {
+				ref.used = false;
+			}
+
+			return;
+		}
 		if (vnode.domSize == null || vnode.domSize === 1) {
-			parent.removeChild(vnode.dom)
+			try {
+			  parent.removeChild(vnode.dom)
+			} catch {}
 		} else {
 			for (var dom of domFor(vnode)) parent.removeChild(dom)
+		}
+		// TODO: move to hooks array.
+		if (vnode.tag === "!" && vnode.attrs != null && vnode.attrs.ondomremove != null) {
+			vnode.attrs.ondomremove(vnode.els)
 		}
 	}
 
@@ -879,7 +1005,7 @@ module.exports = function() {
 
 	var currentDOM
 
-	return function(dom, vnodes, redraw) {
+	return function(dom, vnodes, redraw, udom) {
 		if (!dom) throw new TypeError("DOM element being rendered to does not exist.")
 		if (currentDOM != null && dom.contains(currentDOM)) {
 			throw new TypeError("Node is currently being rendered to and thus is locked.")
@@ -891,6 +1017,7 @@ module.exports = function() {
 		var namespace = dom.namespaceURI
 
 		currentDOM = dom
+		uniqueDOM = udom;
 		currentRedraw = typeof redraw === "function" ? redraw : undefined
 		currentRender = {}
 		try {
